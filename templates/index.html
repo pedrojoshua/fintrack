@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FinTrack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0b0f;
+    --surface: #111318;
+    --surface2: #181b22;
+    --border: #1e2130;
+    --accent: #4ade80;
+    --accent2: #818cf8;
+    --accent3: #fb923c;
+    --danger: #f87171;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --muted2: #94a3b8;
+    --card-shadow: 0 4px 24px rgba(0,0,0,.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Space Grotesk', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 220px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 16px;
+    position: fixed;
+    height: 100vh;
+    z-index: 10;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 40px;
+    padding: 0 8px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent), #22c55e);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+
+  .logo h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+
+  nav a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--muted2);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    margin-bottom: 4px;
+    transition: all .15s;
+    cursor: pointer;
+  }
+
+  nav a:hover, nav a.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  nav a.active { color: var(--accent); }
+  nav a .icon { font-size: 16px; width: 20px; text-align: center; }
+
+  .sidebar-bottom {
+    margin-top: auto;
+    padding: 12px;
+    background: var(--surface2);
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+
+  .sidebar-bottom p { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .sidebar-bottom .tg-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{ opacity:1 } 50%{ opacity:.4 } }
+
+  /* MAIN */
+  .main {
+    margin-left: 220px;
+    flex: 1;
+    padding: 32px 40px;
+    max-width: calc(100vw - 220px);
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+  }
+
+  .header h2 { font-size: 22px; font-weight: 700; }
+  .header p { color: var(--muted2); font-size: 14px; margin-top: 2px; }
+
+  .month-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 8px 16px;
+  }
+
+  .month-nav button {
+    background: none;
+    border: none;
+    color: var(--muted2);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 0 4px;
+    transition: color .15s;
+  }
+  .month-nav button:hover { color: var(--text); }
+  .month-nav #month-label { font-size: 14px; font-weight: 600; min-width: 120px; text-align: center; }
+
+  /* CARDS GRID */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--border); }
+
+  .card-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 8px;
+    font-weight: 600;
+  }
+
+  .card-value {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -1px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .card-value.green { color: var(--accent); }
+  .card-value.purple { color: var(--accent2); }
+  .card-value.orange { color: var(--accent3); }
+  .card-value.red { color: var(--danger); }
+
+  .card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  /* PROGRESS BAR */
+  .progress-bar-wrap {
+    background: var(--border);
+    border-radius: 99px;
+    height: 6px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    border-radius: 99px;
+    transition: width .5s ease;
+  }
+  .progress-bar.green { background: var(--accent); }
+  .progress-bar.orange { background: var(--accent3); }
+  .progress-bar.red { background: var(--danger); }
+
+  /* BOTTOM GRID */
+  .bottom-grid {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 20px;
+    margin-bottom: 24px;
+  }
+
+  /* WEDDING CARD */
+  .wedding-card {
+    background: linear-gradient(135deg, #1a1025 0%, #0f1520 100%);
+    border: 1px solid #2d1f4e;
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .wedding-card h3 { font-size: 14px; color: var(--muted2); margin-bottom: 16px; font-weight: 500; }
+
+  .wedding-numbers {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 16px;
+  }
+
+  .wedding-saved { font-size: 32px; font-weight: 700; color: var(--accent2); letter-spacing: -1.5px; font-family: 'JetBrains Mono', monospace; }
+  .wedding-goal-label { font-size: 13px; color: var(--muted); text-align: right; }
+  .wedding-goal-label strong { display: block; font-size: 16px; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+
+  .wedding-pct { font-size: 12px; color: var(--accent2); margin-top: 8px; }
+
+  /* CATEGORY BREAKDOWN */
+  .cat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .cat-card h3 { font-size: 14px; color: var(--muted2); margin-bottom: 16px; font-weight: 500; }
+
+  .cat-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .cat-icon { font-size: 16px; width: 28px; }
+  .cat-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .cat-amount { font-size: 13px; font-family: 'JetBrains Mono', monospace; color: var(--muted2); }
+
+  .cat-bar-bg { flex: 1; background: var(--border); border-radius: 99px; height: 4px; }
+  .cat-bar { height: 4px; border-radius: 99px; background: var(--accent); }
+
+  /* TRANSACTIONS */
+  .tx-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+  }
+
+  .tx-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .tx-header h3 { font-size: 14px; color: var(--muted2); font-weight: 500; }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: 'Space Grotesk', sans-serif;
+    transition: opacity .15s;
+  }
+  .btn:hover { opacity: .85; }
+  .btn.secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    font-weight: 500;
+  }
+  .btn.danger { background: var(--danger); }
+
+  .tx-row {
+    display: grid;
+    grid-template-columns: 36px 1fr auto auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .tx-row:last-child { border-bottom: none; }
+
+  .tx-icon {
+    width: 36px;
+    height: 36px;
+    background: var(--surface2);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .tx-desc { font-size: 14px; font-weight: 500; }
+  .tx-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .tx-tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: var(--surface2);
+    color: var(--muted2);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .tx-tag.telegram { background: #1a2a3a; color: #60a5fa; }
+  .tx-amount { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 600; }
+  .tx-delete { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; transition: color .15s; }
+  .tx-delete:hover { color: var(--danger); }
+
+  /* MODAL */
+  .modal-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(4px);
+  }
+  .modal-backdrop.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 28px;
+    width: 420px;
+    animation: slideUp .2s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(20px); opacity:0 } to { transform: translateY(0); opacity:1 } }
+
+  .modal h2 { font-size: 18px; font-weight: 700; margin-bottom: 20px; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 12px; color: var(--muted2); font-weight: 500; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .field input, .field select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 10px;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: 'Space Grotesk', sans-serif;
+    outline: none;
+    transition: border-color .15s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+
+  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-actions .btn { flex: 1; padding: 12px; text-align: center; }
+
+  .cat-select-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .cat-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 4px;
+    text-align: center;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--muted2);
+    transition: all .15s;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  .cat-btn .cat-btn-icon { display: block; font-size: 20px; margin-bottom: 4px; }
+  .cat-btn:hover, .cat-btn.selected { background: var(--surface); border-color: var(--accent); color: var(--accent); }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 200;
+    display: none;
+    animation: fadeIn .2s ease;
+  }
+  .toast.show { display: block; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform: translateY(0) } }
+  .toast.success { border-color: var(--accent); color: var(--accent); }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+
+  /* EMPTY STATE */
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+  }
+  .empty .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty p { font-size: 14px; }
+
+  /* SETTINGS PANEL */
+  #settings-panel { display: none; }
+  #dashboard-panel { display: block; }
+
+  /* RESPONSIVE */
+  @media (max-width: 1100px) {
+    .cards { grid-template-columns: repeat(2, 1fr); }
+    .bottom-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="logo">
+    <div class="logo-icon">💰</div>
+    <h1>Fin<span>Track</span></h1>
+  </div>
+
+  <nav>
+    <a class="active" onclick="showPanel('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </a>
+    <a onclick="showPanel('settings')">
+      <span class="icon">⚙️</span> Definições
+    </a>
+  </nav>
+
+  <div class="sidebar-bottom">
+    <p>Telegram Bot</p>
+    <div class="tg-status">
+      <div class="dot"></div>
+      Integração ativa
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+  <!-- DASHBOARD PANEL -->
+  <div id="dashboard-panel">
+    <div class="header">
+      <div>
+        <h2>Painel Financeiro</h2>
+        <p id="today-date"></p>
+      </div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="month-nav">
+          <button onclick="changeMonth(-1)">‹</button>
+          <span id="month-label">—</span>
+          <button onclick="changeMonth(1)">›</button>
+        </div>
+        <button class="btn" onclick="openModal()">+ Adicionar</button>
+      </div>
+    </div>
+
+    <!-- SUMMARY CARDS -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-label">Gastos do Mês</div>
+        <div class="card-value red" id="card-expenses">—</div>
+        <div class="card-sub">
+          <div class="progress-bar-wrap">
+            <div class="progress-bar orange" id="budget-bar" style="width:0%"></div>
+          </div>
+          <span id="budget-label" style="margin-top:6px;display:block"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Investimentos</div>
+        <div class="card-value purple" id="card-investments">—</div>
+        <div class="card-sub">Este mês</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Casamento — Este Mês</div>
+        <div class="card-value green" id="card-wedding-month">—</div>
+        <div class="card-sub">Contribuição mensal</div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Orçamento Restante</div>
+        <div class="card-value" id="card-remaining">—</div>
+        <div class="card-sub">Para gastar este mês</div>
+      </div>
+    </div>
+
+    <!-- BOTTOM GRID -->
+    <div class="bottom-grid">
+      <!-- WEDDING SAVINGS -->
+      <div class="wedding-card">
+        <h3>💍 Poupança — Casamento</h3>
+        <div class="wedding-numbers">
+          <div>
+            <div class="wedding-saved" id="wedding-saved">—</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">guardado</div>
+          </div>
+          <div class="wedding-goal-label">
+            Meta
+            <strong id="wedding-goal">—</strong>
+          </div>
+        </div>
+        <div class="progress-bar-wrap" style="height:8px">
+          <div class="progress-bar" id="wedding-bar" style="width:0%;background:var(--accent2)"></div>
+        </div>
+        <div class="wedding-pct" id="wedding-pct" style="margin-top:10px"></div>
+      </div>
+
+      <!-- CATEGORY BREAKDOWN -->
+      <div class="cat-card">
+        <h3>Por categoria</h3>
+        <div id="cat-list"></div>
+      </div>
+    </div>
+
+    <!-- TRANSACTIONS -->
+    <div class="tx-card">
+      <div class="tx-header">
+        <h3>Transações recentes</h3>
+        <span id="tx-count" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="tx-list"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div id="settings-panel">
+    <div class="header">
+      <div>
+        <h2>Definições</h2>
+        <p>Configura metas e orçamento</p>
+      </div>
+    </div>
+
+    <div class="tx-card" style="max-width:480px">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:20px">Metas Financeiras</h3>
+
+      <div class="field">
+        <label>Meta Casamento (€)</label>
+        <input type="number" id="s-wedding-goal" placeholder="15000">
+      </div>
+
+      <div class="field">
+        <label>Orçamento Mensal (€)</label>
+        <input type="number" id="s-monthly-budget" placeholder="2000">
+      </div>
+
+      <button class="btn" onclick="saveSettings()" style="margin-top:8px">Guardar</button>
+    </div>
+
+    <div class="tx-card" style="max-width:480px;margin-top:16px">
+      <h3 style="font-size:15px;font-weight:600;margin-bottom:16px">📱 Bot Telegram</h3>
+      <p style="font-size:13px;color:var(--muted2);line-height:1.6">
+        Envia mensagens no formato:<br>
+        <code style="background:var(--surface2);padding:2px 8px;border-radius:6px;color:var(--accent)">50 supermercado</code><br>
+        <code style="background:var(--surface2);padding:2px 8px;border-radius:6px;color:var(--accent)">200 casamento</code><br>
+        <code style="background:var(--surface2);padding:2px 8px;border-radius:6px;color:var(--accent)">1000 investimento ETF</code><br><br>
+        Comandos: <strong>/resumo</strong> · <strong>/casamento</strong> · <strong>/ajuda</strong>
+      </p>
+    </div>
+  </div>
+
+</main>
+
+<!-- ADD TRANSACTION MODAL -->
+<div class="modal-backdrop" id="modal">
+  <div class="modal">
+    <h2>Nova Transação</h2>
+
+    <div class="field">
+      <label>Categoria</label>
+      <div class="cat-select-grid" id="cat-grid"></div>
+    </div>
+
+    <div class="field">
+      <label>Valor (€)</label>
+      <input type="number" id="m-amount" placeholder="0.00" step="0.01">
+    </div>
+
+    <div class="field">
+      <label>Descrição</label>
+      <input type="text" id="m-desc" placeholder="Ex: Supermercado Continente">
+    </div>
+
+    <div class="field">
+      <label>Data</label>
+      <input type="date" id="m-date">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn" onclick="submitTransaction()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CAT_ICONS = {
+  alimentação: "🛒", casa: "🏠", transporte: "🚗",
+  saúde: "💊", lazer: "🎮", investimento: "📈",
+  casamento: "💍", outros: "📦"
+};
+
+let currentMonth = new Date().getMonth() + 1;
+let currentYear = new Date().getFullYear();
+let selectedCat = "outros";
+
+// INIT
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("today-date").textContent = new Date().toLocaleDateString("pt-PT", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+  document.getElementById("m-date").value = new Date().toISOString().split("T")[0];
+  updateMonthLabel();
+  loadSummary();
+  loadTransactions();
+  buildCatGrid();
+});
+
+function updateMonthLabel() {
+  const d = new Date(currentYear, currentMonth - 1, 1);
+  document.getElementById("month-label").textContent = d.toLocaleDateString("pt-PT", { month:"long", year:"numeric" });
+}
+
+function changeMonth(dir) {
+  currentMonth += dir;
+  if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+  if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+  updateMonthLabel();
+  loadSummary();
+  loadTransactions();
+}
+
+// SUMMARY
+async function loadSummary() {
+  const r = await fetch(`/api/summary?month=${currentMonth}&year=${currentYear}`);
+  const d = await r.json();
+
+  const fmt = v => v.toFixed(2) + "€";
+
+  document.getElementById("card-expenses").textContent = fmt(d.expenses);
+  document.getElementById("card-investments").textContent = fmt(d.investments);
+  document.getElementById("card-wedding-month").textContent = fmt(d.wedding_month);
+
+  const remaining = d.budget - d.expenses;
+  const remEl = document.getElementById("card-remaining");
+  remEl.textContent = fmt(Math.abs(remaining));
+  remEl.className = "card-value " + (remaining >= 0 ? "green" : "red");
+
+  const pct = Math.min((d.expenses / d.budget) * 100, 100);
+  const bar = document.getElementById("budget-bar");
+  bar.style.width = pct + "%";
+  bar.className = "progress-bar " + (pct > 80 ? "red" : "orange");
+  document.getElementById("budget-label").textContent = `${d.expenses.toFixed(0)}€ de ${d.budget.toFixed(0)}€`;
+
+  // Wedding
+  const w = d.wedding;
+  document.getElementById("wedding-saved").textContent = fmt(w.saved);
+  document.getElementById("wedding-goal").textContent = fmt(w.goal);
+  const wpct = Math.min((w.saved / w.goal) * 100, 100);
+  document.getElementById("wedding-bar").style.width = wpct + "%";
+  const remaining_w = Math.max(w.goal - w.saved, 0);
+  document.getElementById("wedding-pct").textContent = `${wpct.toFixed(1)}% atingido · Falta ${fmt(remaining_w)}`;
+
+  // Categories
+  const cats = d.by_category;
+  const maxVal = Math.max(...Object.values(cats).filter(v => v > 0), 1);
+  const catList = document.getElementById("cat-list");
+  catList.innerHTML = "";
+
+  const displayCats = Object.entries(cats)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+
+  if (displayCats.length === 0) {
+    catList.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>Sem dados este mês</p></div>';
+    return;
+  }
+
+  for (const [cat, val] of displayCats) {
+    const pctCat = (val / maxVal) * 100;
+    catList.innerHTML += `
+      <div class="cat-row">
+        <div class="cat-icon">${CAT_ICONS[cat] || "📦"}</div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span class="cat-name">${cat.charAt(0).toUpperCase()+cat.slice(1)}</span>
+            <span class="cat-amount">${val.toFixed(2)}€</span>
+          </div>
+          <div class="cat-bar-bg"><div class="cat-bar" style="width:${pctCat}%"></div></div>
+        </div>
+      </div>`;
+  }
+}
+
+// TRANSACTIONS
+async function loadTransactions() {
+  const r = await fetch(`/api/transactions?month=${currentMonth}&year=${currentYear}`);
+  const txs = await r.json();
+  const list = document.getElementById("tx-list");
+  document.getElementById("tx-count").textContent = `${txs.length} transações`;
+
+  if (txs.length === 0) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">📭</div><p>Sem transações este mês.<br>Adiciona ou envia pelo Telegram.</p></div>';
+    return;
+  }
+
+  list.innerHTML = txs.map(tx => `
+    <div class="tx-row" id="tx-${tx.id}">
+      <div class="tx-icon">${CAT_ICONS[tx.category] || "📦"}</div>
+      <div>
+        <div class="tx-desc">${tx.description || tx.category}</div>
+        <div class="tx-meta">${formatDate(tx.date)}</div>
+      </div>
+      <span class="tx-tag ${tx.source === 'telegram' ? 'telegram' : ''}">${tx.source === 'telegram' ? '📱 Telegram' : tx.category}</span>
+      <span class="tx-amount">${tx.amount.toFixed(2)}€</span>
+      <button class="tx-delete" onclick="deleteTransaction(${tx.id})">🗑</button>
+    </div>
+  `).join("");
+}
+
+function formatDate(d) {
+  return new Date(d + "T00:00:00").toLocaleDateString("pt-PT", { day:"2-digit", month:"short", year:"numeric" });
+}
+
+async function deleteTransaction(id) {
+  await fetch(`/api/transactions/${id}`, { method: "DELETE" });
+  document.getElementById(`tx-${id}`).remove();
+  loadSummary();
+  showToast("Transação eliminada", "success");
+}
+
+// MODAL
+function buildCatGrid() {
+  const grid = document.getElementById("cat-grid");
+  const cats = ["alimentação","casa","transporte","saúde","lazer","investimento","casamento","outros"];
+  grid.innerHTML = cats.map(c => `
+    <button class="cat-btn ${c === selectedCat ? 'selected' : ''}" onclick="selectCat('${c}')">
+      <span class="cat-btn-icon">${CAT_ICONS[c]}</span>
+      ${c.charAt(0).toUpperCase()+c.slice(1)}
+    </button>
+  `).join("");
+}
+
+function selectCat(cat) {
+  selectedCat = cat;
+  buildCatGrid();
+}
+
+function openModal() {
+  document.getElementById("modal").classList.add("open");
+  document.getElementById("m-amount").focus();
+}
+
+function closeModal() {
+  document.getElementById("modal").classList.remove("open");
+}
+
+async function submitTransaction() {
+  const amount = parseFloat(document.getElementById("m-amount").value);
+  const desc = document.getElementById("m-desc").value.trim();
+  const date = document.getElementById("m-date").value;
+
+  if (!amount || amount <= 0) { showToast("Insere um valor válido", "error"); return; }
+  if (!date) { showToast("Insere uma data", "error"); return; }
+
+  await fetch("/api/transactions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ amount, description: desc, category: selectedCat, date, source: "manual" })
+  });
+
+  closeModal();
+  document.getElementById("m-amount").value = "";
+  document.getElementById("m-desc").value = "";
+  loadSummary();
+  loadTransactions();
+  showToast("Transação guardada ✓", "success");
+}
+
+// SETTINGS
+function showPanel(name) {
+  document.getElementById("dashboard-panel").style.display = name === "dashboard" ? "block" : "none";
+  document.getElementById("settings-panel").style.display = name === "settings" ? "block" : "none";
+  document.querySelectorAll("nav a").forEach(a => a.classList.remove("active"));
+  event.currentTarget.classList.add("active");
+
+  if (name === "settings") loadSettingsForm();
+}
+
+async function loadSettingsForm() {
+  const r = await fetch("/api/settings");
+  const d = await r.json();
+  document.getElementById("s-wedding-goal").value = d.wedding_goal;
+  document.getElementById("s-monthly-budget").value = d.monthly_budget;
+}
+
+async function saveSettings() {
+  const goal = document.getElementById("s-wedding-goal").value;
+  const budget = document.getElementById("s-monthly-budget").value;
+  await fetch("/api/settings", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ wedding_goal: goal, monthly_budget: budget })
+  });
+  showToast("Definições guardadas ✓", "success");
+  loadSummary();
+}
+
+// TOAST
+function showToast(msg, type = "success") {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.className = `toast show ${type}`;
+  setTimeout(() => t.className = "toast", 3000);
+}
+
+// Close modal on backdrop click
+document.getElementById("modal").addEventListener("click", e => {
+  if (e.target === document.getElementById("modal")) closeModal();
+});
+</script>
+</body>
+</html>

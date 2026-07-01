@@ -1,0 +1,5 @@
+node_modules/
+.env
+telegram-bridge/config.json
+data.json
+*.log
