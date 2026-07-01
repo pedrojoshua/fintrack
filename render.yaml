@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fintrack
+    runtime: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: TELEGRAM_TOKEN
+        sync: false
+      - key: NODE_ENV
+        value: production
