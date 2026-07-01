@@ -1,10 +1,11 @@
 // FinTrack — Servidor de Produção
-// Express + API REST + Bot Telegram (webhook + polling fallback) + Dados JSON
+// Express + API REST + Auth + Bot Telegram (webhook + polling) + Dados JSON
 
 const express  = require("express");
 const https    = require("https");
 const fs       = require("fs");
 const path     = require("path");
+const crypto   = require("crypto");
 
 // ── .ENV LOCAL ────────────────────────────────────────────
 try {
@@ -21,20 +22,49 @@ try {
   }
 } catch {}
 
-const TOKEN    = process.env.TELEGRAM_TOKEN;
-const PORT     = process.env.PORT || 3000;
-const APP_URL  = (process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || "").replace(/\/$/, "");
-const DB_PATH  = process.env.DATA_PATH || path.join(__dirname, "data.json");
+const TOKEN   = process.env.TELEGRAM_TOKEN;
+const PORT    = process.env.PORT || 3000;
+const APP_URL = (process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || "").replace(/\/$/, "");
+const DB_PATH = process.env.DATA_PATH || path.join(__dirname, "data.json");
 
 // ── DATABASE (JSON FILE) ─────────────────────────────────
 function readDB() {
   try {
     if (fs.existsSync(DB_PATH)) return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
   } catch {}
-  return { transactions: [], settings: { salary: 4000, wedding_goal: 15000, savings_goal: 500 } };
+  return {
+    transactions: [],
+    settings: { salary: 4000, wedding_goal: 15000, savings_goal: 500 },
+    users: [],
+    sessions: []
+  };
 }
 function writeDB(data) {
-  try { fs.writeFileSync(DB_PATH, JSON.stringify(data)); } catch {}
+  try { fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2)); } catch {}
+}
+
+// ── AUTH HELPERS ─────────────────────────────────────────
+function randomToken() {
+  return crypto.randomBytes(32).toString("hex");
+}
+
+function findSession(token) {
+  if (!token) return null;
+  const db = readDB();
+  const session = (db.sessions || []).find(s => s.token === token);
+  if (!session) return null;
+  // Expire after 30 days
+  if (Date.now() - session.createdAt > 30 * 24 * 60 * 60 * 1000) return null;
+  return session;
+}
+
+function requireAuth(req, res, next) {
+  const header = req.headers["authorization"] || "";
+  const token  = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const session = findSession(token);
+  if (!session) return res.status(401).json({ error: "Não autenticado." });
+  req.username = session.username;
+  next();
 }
 
 // ── CATEGORIES ────────────────────────────────────────────
@@ -73,12 +103,12 @@ function parseMsg(text) {
       : tl.includes("invest") ? "investimento" : "outros")
     : detectCat(desc);
   return {
-    id:          Date.now().toString() + Math.random().toString(36).slice(2,5),
-    tipo:        isIn ? "entrada" : "saida",
-    date:        new Date().toISOString().split("T")[0],
+    id:     Date.now().toString() + Math.random().toString(36).slice(2,5),
+    tipo:   isIn ? "entrada" : "saida",
+    date:   new Date().toISOString().split("T")[0],
     amount, category: cat, description: desc,
-    origin:      tl.includes("pix") ? "pix" : isIn ? "transferencia" : "outro",
-    source:      "telegram"
+    origin: tl.includes("pix") ? "pix" : isIn ? "transferencia" : "outro",
+    source: "telegram"
   };
 }
 
@@ -208,24 +238,66 @@ app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
   if (req.method === "OPTIONS") { res.sendStatus(204); return; }
   next();
 });
 
-// Telegram webhook endpoint
+// ── AUTH ROUTES ───────────────────────────────────────────
+app.post("/api/auth/setup", (req, res) => {
+  const db = readDB();
+  if (!db.users) db.users = [];
+  if (db.users.length > 0) return res.status(409).json({ error: "Conta já existe. Faz login." });
+
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: "Campos obrigatórios." });
+
+  db.users.push({ username, password }); // password already SHA-256 from client
+  const token = randomToken();
+  if (!db.sessions) db.sessions = [];
+  db.sessions.push({ token, username, createdAt: Date.now() });
+  writeDB(db);
+  res.json({ token, username });
+});
+
+app.post("/api/auth/login", (req, res) => {
+  const db = readDB();
+  if (!db.users || db.users.length === 0) return res.status(404).json({ error: "Sem utilizadores. Cria uma conta." });
+
+  const { username, password } = req.body;
+  const user = db.users.find(u => u.username === username && u.password === password);
+  if (!user) return res.status(401).json({ error: "Utilizador ou senha incorretos." });
+
+  const token = randomToken();
+  if (!db.sessions) db.sessions = [];
+  // Clean old sessions for this user
+  db.sessions = db.sessions.filter(s => s.username !== username);
+  db.sessions.push({ token, username, createdAt: Date.now() });
+  writeDB(db);
+  res.json({ token, username });
+});
+
+app.get("/api/auth/me", (req, res) => {
+  const header = req.headers["authorization"] || "";
+  const token  = header.startsWith("Bearer ") ? header.slice(7) : null;
+  const session = findSession(token);
+  if (!session) return res.status(401).json({ error: "Não autenticado." });
+  res.json({ username: session.username });
+});
+
+// ── TELEGRAM WEBHOOK ──────────────────────────────────────
 app.post("/telegram-webhook", async (req, res) => {
   res.sendStatus(200);
   if (req.body) await handleUpdate(req.body).catch(() => {});
 });
 
-// Keep-alive (para Render free tier)
+// Keep-alive
 app.get("/ping", (_, res) => res.send("ok"));
 
-// API
-app.get("/api/status",       (_, res) => res.json({ ok: true, version: "2.0", mode: APP_URL ? "webhook" : "polling" }));
+// ── API (protegida) ───────────────────────────────────────
+app.get("/api/status", (_, res) => res.json({ ok: true, version: "3.0", mode: APP_URL ? "webhook" : "polling" }));
 
-app.get("/api/transactions",  (req, res) => {
+app.get("/api/transactions", requireAuth, (req, res) => {
   const db = readDB();
   const { month, year } = req.query;
   if (month && year) {
@@ -238,7 +310,7 @@ app.get("/api/transactions",  (req, res) => {
   res.json(db.transactions);
 });
 
-app.post("/api/transactions", (req, res) => {
+app.post("/api/transactions", requireAuth, (req, res) => {
   const db = readDB();
   const tx = { id: Date.now().toString() + Math.random().toString(36).slice(2,4), ...req.body };
   db.transactions.push(tx);
@@ -246,22 +318,22 @@ app.post("/api/transactions", (req, res) => {
   res.status(201).json(tx);
 });
 
-app.delete("/api/transactions/:id", (req, res) => {
+app.delete("/api/transactions/:id", requireAuth, (req, res) => {
   const db = readDB();
   db.transactions = db.transactions.filter(t => t.id !== req.params.id);
   writeDB(db);
   res.json({ ok: true });
 });
 
-app.get("/api/settings",  (_, res) => res.json(readDB().settings));
-app.post("/api/settings", (req, res) => {
+app.get("/api/settings", requireAuth, (_, res) => res.json(readDB().settings));
+app.post("/api/settings", requireAuth, (req, res) => {
   const db = readDB();
   Object.assign(db.settings, req.body);
   writeDB(db);
   res.json(db.settings);
 });
 
-app.get("/api/summary", (req, res) => {
+app.get("/api/summary", requireAuth, (req, res) => {
   const db  = readDB();
   const now = new Date();
   const m   = +(req.query.month || now.getMonth()+1);
@@ -278,27 +350,33 @@ app.get("/api/summary", (req, res) => {
   res.json({
     totalIn, totalOut, saldo: totalIn-totalOut,
     investments: byCat["investimento"]||0,
-    wedding_month: byCat["casamento"]||0,
     wedding: { saved: weddingTotal, goal: db.settings.wedding_goal||15000 },
     by_category: byCat, settings: db.settings
   });
 });
 
-// Static files — index.html
-app.use(express.static(path.join(__dirname)));
-app.get("*", (_, res) => res.sendFile(path.join(__dirname, "index.html")));
+// ── STATIC FILES ──────────────────────────────────────────
+const PUBLIC = path.join(__dirname);
+app.get("/", (_, res) => res.sendFile(path.join(PUBLIC, "index.html")));
+app.use("/node_modules", (_, res) => res.sendStatus(403));
+app.use(express.static(PUBLIC, { dotfiles: "deny" }));
+app.get("*", (_, res) => {
+  const f = path.join(PUBLIC, "index.html");
+  if (fs.existsSync(f)) return res.sendFile(f);
+  res.status(404).send("FinTrack: index.html não encontrado.");
+});
 
 // ── START ─────────────────────────────────────────────────
 app.listen(PORT, async () => {
-  console.log(`\n🚀 FinTrack a correr na porta ${PORT}`);
-  console.log(`   Bot: ${TOKEN ? "✅ configurado" : "❌ sem token"}`);
+  console.log(`\n🚀 FinTrack v3.0 na porta ${PORT}`);
+  console.log(`   Auth: ✅ ativo`);
+  console.log(`   Bot:  ${TOKEN ? "✅ configurado" : "❌ sem token"}`);
 
   if (!TOKEN) return;
 
   const useWebhook = await setupWebhook();
 
   if (!useWebhook) {
-    // Polling local (dev)
     console.log("🔄 Polling ativo (modo local)...\n");
     (async function loop() {
       while (true) {
