@@ -451,6 +451,11 @@ nav a.active{color:var(--t);border-left-color:var(--blue);}
       <div class="sb-saldo-hint">todos os meses</div>
     </div>
 
+    <div style="padding:0 24px 8px;display:flex;align-items:center;gap:6px">
+      <div id="server-dot" style="width:6px;height:6px;border-radius:50%;background:var(--t4);flex-shrink:0"></div>
+      <span id="server-label" style="font-size:11px;color:var(--t4)">local</span>
+    </div>
+
     <div class="sb-user">
       <div class="sb-avatar" id="sb-avatar">P</div>
       <span class="sb-username" id="sb-username">utilizador</span>
@@ -474,6 +479,7 @@ nav a.active{color:var(--t);border-left-color:var(--blue);}
             <span id="month-label"></span>
             <button onclick="changeMonth(1)">›</button>
           </div>
+          <button class="btn-secondary" id="sync-btn" onclick="manualSync()" title="Sincronizar com servidor">↻</button>
           <button class="btn-secondary" onclick="openModal('entrada')">+ Entrada</button>
           <button class="btn-primary" onclick="openModal('saida')">+ Saída</button>
         </div>
@@ -652,30 +658,53 @@ async function sha256(msg) {
 }
 
 async function checkAuth() {
-  // Try server
+  // Testa se o servidor está acessível
+  let serverUp = false;
   try {
-    const r = await fetch(API + "/api/auth/me", {
-      headers: { "Authorization": "Bearer " + authToken },
-      signal: AbortSignal.timeout(3000)
-    });
-    if (r.ok) {
-      const d = await r.json();
-      SERVER_MODE = true;
-      currentUser = d.username;
-      localStorage.setItem("ft_user", currentUser);
-      await syncFromServer();
-      showApp();
-      return;
-    }
+    const ping = await fetch(API + "/api/status", { signal: AbortSignal.timeout(3000) });
+    serverUp = ping.ok;
   } catch {}
 
-  // Fallback: local auth
+  // Se servidor está up, obriga auth pelo servidor (para o Telegram funcionar)
+  if (serverUp) {
+    if (authToken) {
+      try {
+        const r = await fetch(API + "/api/auth/me", {
+          headers: { "Authorization": "Bearer " + authToken },
+          signal: AbortSignal.timeout(3000)
+        });
+        if (r.ok) {
+          const d = await r.json();
+          SERVER_MODE = true;
+          currentUser = d.username;
+          localStorage.setItem("ft_user", currentUser);
+          await syncFromServer();
+          showApp();
+          return;
+        }
+      } catch {}
+    }
+    // Servidor up mas token inválido → login (verificar se há conta criada)
+    try {
+      const chk = await fetch(API + "/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: "__check__", password: "" }),
+        signal: AbortSignal.timeout(2000)
+      });
+      // 401 = tem conta mas login errado → mostrar login
+      // 404 = sem conta → mostrar setup
+      if (chk.status === 404) { showSetup(); return; }
+    } catch {}
+    showLogin();
+    return;
+  }
+
+  // Sem servidor: fallback local
   if (authToken && authToken === localStorage.getItem("ft_local_token")) {
     showApp();
     return;
   }
-
-  // Check if setup needed
   const hasUsers = localStorage.getItem("ft_has_users");
   if (!hasUsers) showSetup(); else showLogin();
 }
@@ -803,11 +832,40 @@ function showSetup() {
   document.getElementById("login-box").style.display = "none";
   document.getElementById("setup-box").style.display = "block";
 }
+function updateServerIndicator() {
+  const dot = document.getElementById("server-dot");
+  const lbl = document.getElementById("server-label");
+  if (!dot || !lbl) return;
+  if (SERVER_MODE) {
+    dot.style.background = "#16a34a";
+    lbl.textContent = "online · sync ativo";
+    lbl.style.color = "var(--t3)";
+  } else {
+    dot.style.background = "var(--t4)";
+    lbl.textContent = "local";
+    lbl.style.color = "var(--t4)";
+  }
+}
+
+async function manualSync() {
+  const btn = document.getElementById("sync-btn");
+  if (btn) { btn.textContent = "…"; btn.disabled = true; }
+  if (SERVER_MODE) {
+    await syncFromServer();
+    render();
+    toast("Sincronizado com o servidor","success");
+  } else {
+    toast("Não ligado ao servidor","error");
+  }
+  if (btn) { btn.textContent = "↻"; btn.disabled = false; }
+}
+
 function showApp() {
   document.getElementById("auth-wrap").style.display = "none";
   document.getElementById("app").style.display = "flex";
   document.getElementById("sb-username").textContent = currentUser;
   document.getElementById("sb-avatar").textContent = currentUser[0]?.toUpperCase() || "U";
+  updateServerIndicator();
   init();
 }
 
@@ -1097,18 +1155,8 @@ async function submit() {
 
   const tx = { id:Date.now().toString(), tipo:mType, date, amount, category:selCat, description:desc, origin };
 
-  if (SERVER_MODE) {
-    try {
-      const r = await fetch(API+"/api/transactions", {
-        method:"POST",
-        headers:{"Content-Type":"application/json","Authorization":"Bearer "+authToken},
-        body: JSON.stringify(tx)
-      });
-      if (r.ok) { const saved=await r.json(); tx.id=saved.id||tx.id; await syncFromServer(); }
-    } catch {}
-  } else {
-    const all = S.getTx(); all.push(tx); S.saveTx(all);
-  }
+  // Sempre guarda localmente primeiro (nunca perde dados)
+  const all = S.getTx(); all.push(tx); S.saveTx(all);
 
   closeModal();
   document.getElementById("m-amount").value = "";
@@ -1116,6 +1164,17 @@ async function submit() {
   const d = new Date(date); curM=d.getMonth()+1; curY=d.getFullYear();
   updateMonthLabel(); render();
   toast(`${mType==="entrada"?"Entrada":"Saída"} de ${fmtR(amount)} guardada`,"success");
+
+  // Sincroniza com servidor em background
+  if (SERVER_MODE) {
+    try {
+      await fetch(API+"/api/transactions", {
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+authToken},
+        body: JSON.stringify(tx)
+      });
+    } catch {}
+  }
 }
 
 /* ══════════════════════════════════════════════════
