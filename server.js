@@ -69,7 +69,7 @@ function requireAuth(req, res, next) {
 
 // ── CATEGORIES ────────────────────────────────────────────
 const CAT_MAP_OUT = {
-  "alimentacao": ["supermercado","mercado","ifood","restaurante","comida","almoco","jantar","cafe","padaria","lanche","pizza","shoppe","shopee","shein","americanas","extra","carrefour","atacadao","hortifruti","acougue","feira"],
+  "alimentacao": ["supermercado","mercado","ifood","restaurante","comida","almoco","jantar","cafe","padaria","lanche","pizza","extra","carrefour","atacadao","hortifruti","acougue","feira"],
   "transporte":  ["gasolina","uber","99","combustivel","estacionamento","onibus","metro","taxi","pedagio","moto","carro","financiamento moto","financiamento carro","manutencao","ipva","seguro moto","seguro carro","detran","revisao"],
   "casa":        ["aluguel","renda","luz","agua","gas","internet","condominio","moveis","limpeza","financiamento","parcela","prestacao","banco pan","pan","caixa","bradesco","itau","santander","nubank","inter","emprestimo"],
   "saude":       ["farmacia","remedio","medico","dentista","hospital","consulta","exame","clinica","plano","unimed","convenio"],
@@ -78,6 +78,7 @@ const CAT_MAP_OUT = {
   "casamento":   ["casamento","buffet","salao","vestido","alianca","flores","convite","lua de mel","noiva","decoracao","cerimonia"],
   "educacao":    ["curso","livro","faculdade","escola","estudo","mensalidade","udemy","alura","rocketseat","inglês","ingles"],
   "vestuario":   ["roupa","sapato","tenis","calca","camiseta","cea","renner","riachuelo","zara","moda"],
+  "outros":      ["shopee","shoppe","shein","americanas","aliexpress","magazine","magalu","kabum","amazon","mercado livre","mercadolivre","olx"],
 };
 const CAT_MAP_IN = {
   "salario":      ["salario","salário","lustoza","empresa","grupo","pagamento","holerite","contracheque","deposito empresa","dep empresa"],
