@@ -68,46 +68,110 @@ function requireAuth(req, res, next) {
 }
 
 // ── CATEGORIES ────────────────────────────────────────────
-const CAT_MAP = {
-  "alimentação": ["supermercado","mercado","ifood","restaurante","comida","almoço","jantar","café","padaria","lanche","pizza"],
-  "casa":        ["aluguel","renda","luz","água","gás","internet","condomínio","móveis","limpeza"],
-  "transporte":  ["gasolina","uber","99","combustível","estacionamento","ônibus","metrô","táxi","pedágio"],
-  "saúde":       ["farmácia","remédio","médico","dentista","hospital","consulta","exame","clínica"],
-  "lazer":       ["netflix","spotify","cinema","bar","festa","viagem","hotel","jogo","amazon","steam"],
-  "investimento":["investimento","ação","bitcoin","cripto","etf","fundo","tesouro","cdb"],
-  "casamento":   ["casamento","buffet","salão","vestido","aliança","flores","convite","lua de mel"],
-  "educação":    ["curso","livro","faculdade","escola","estudo","mensalidade"],
-  "vestuário":   ["roupa","sapato","tênis","calça","camiseta","loja"],
+const CAT_MAP_OUT = {
+  "alimentacao": ["supermercado","mercado","ifood","restaurante","comida","almoco","jantar","cafe","padaria","lanche","pizza","shoppe","shopee","shein","americanas","extra","carrefour","atacadao","hortifruti","acougue","feira"],
+  "transporte":  ["gasolina","uber","99","combustivel","estacionamento","onibus","metro","taxi","pedagio","moto","carro","financiamento moto","financiamento carro","manutencao","ipva","seguro moto","seguro carro","detran","revisao"],
+  "casa":        ["aluguel","renda","luz","agua","gas","internet","condominio","moveis","limpeza","financiamento","parcela","prestacao","banco pan","pan","caixa","bradesco","itau","santander","nubank","inter","emprestimo"],
+  "saude":       ["farmacia","remedio","medico","dentista","hospital","consulta","exame","clinica","plano","unimed","convenio"],
+  "lazer":       ["netflix","spotify","cinema","bar","festa","viagem","hotel","jogo","amazon","steam","prime","disney","hbo","max","deezer","show","ingresso"],
+  "investimento":["investimento","acao","bitcoin","cripto","etf","fundo","tesouro","cdb","xp","rico","nuinvest"],
+  "casamento":   ["casamento","buffet","salao","vestido","alianca","flores","convite","lua de mel","noiva","decoracao","cerimonia"],
+  "educacao":    ["curso","livro","faculdade","escola","estudo","mensalidade","udemy","alura","rocketseat","inglês","ingles"],
+  "vestuario":   ["roupa","sapato","tenis","calca","camiseta","cea","renner","riachuelo","zara","moda"],
 };
-function detectCat(text) {
-  const t = text.toLowerCase();
-  for (const [cat, kws] of Object.entries(CAT_MAP)) {
-    if (kws.some(k => t.includes(k))) return cat;
+const CAT_MAP_IN = {
+  "salario":      ["salario","salário","lustoza","empresa","grupo","pagamento","holerite","contracheque","deposito empresa","dep empresa"],
+  "pix recebido": ["pix"],
+  "freelance":    ["freelance","freela","trabalho extra","bico","servico","servico prestado"],
+  "investimento": ["rendimento","dividendo","cdb rendeu","tesouro","lucro investimento"],
+  "venda":        ["venda","vendi","vendido"],
+};
+
+function normalizeStr(s) {
+  return s.toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+function detectCatOut(text) {
+  const t = normalizeStr(text);
+  for (const [cat, kws] of Object.entries(CAT_MAP_OUT)) {
+    if (kws.some(k => t.includes(normalizeStr(k)))) return cat === "alimentacao" ? "alimentação"
+      : cat === "saude" ? "saúde" : cat === "educacao" ? "educação" : cat === "vestuario" ? "vestuário" : cat;
+  }
+  return "outros";
+}
+function detectCatIn(text) {
+  const t = normalizeStr(text);
+  for (const [cat, kws] of Object.entries(CAT_MAP_IN)) {
+    if (kws.some(k => t.includes(normalizeStr(k)))) return cat === "salario" ? "salário" : cat;
   }
   return "outros";
 }
 
-// ── PARSE TELEGRAM MESSAGE ────────────────────────────────
+// ── PARSE AMOUNT ──────────────────────────────────────────
+function parseAmount(str) {
+  let s = str.replace(/R\$\s*/gi, "").trim();
+  if (/\d{1,3}(\.\d{3})+,\d{1,2}/.test(s)) {
+    s = s.replace(/\./g, "").replace(",", ".");
+  } else {
+    s = s.replace(",", ".");
+  }
+  const v = parseFloat(s);
+  return isNaN(v) ? null : v;
+}
+
+// ── PARSE TELEGRAM MESSAGE (linguagem natural) ────────────
+// Exemplos aceites:
+//   "Salario entrada - 4000,00 Grupo Lustoza"
+//   "Saida - Shopee 81,00"
+//   "Saida Banco Pan: 743,00 Financiamento moto"
+//   "recebi 300 pix pedro"
+//   "50 supermercado"
 function parseMsg(text) {
-  const t = text.trim();
-  const isIn = /^(entrada|recebi|receb[ie]|recibo|ganhei)/i.test(t);
-  const stripped = t.replace(/^(entrada|recebi|receb[ie]|recibo|ganhei)\s+/i, "");
-  const match = stripped.match(/^([\d]+(?:[.,]\d{1,2})?)\s+(.+)/);
-  if (!match) return null;
-  const amount = parseFloat(match[1].replace(",", "."));
-  const desc   = match[2].trim();
-  const tl     = desc.toLowerCase();
-  const cat = isIn
-    ? (tl.includes("pix") ? "pix recebido" : tl.includes("salário")||tl.includes("salario") ? "salário"
-      : tl.includes("freelance")||tl.includes("freela") ? "freelance"
-      : tl.includes("invest") ? "investimento" : "outros")
-    : detectCat(desc);
+  const t  = text.trim();
+  const tl = normalizeStr(t);
+
+  // ── 1. DETECT TYPE ──────────────────────────────────────
+  const entradaRx = /\b(entrada|salario|salário|recebi|recebo|recebido|ganhei|credito|deposito)\b/i;
+  const isIn      = entradaRx.test(t);
+  const tipo      = isIn ? "entrada" : "saida";
+
+  // ── 2. EXTRACT AMOUNT ───────────────────────────────────
+  const amountRx = /R?\$?\s*(\d{1,3}(?:\.\d{3})*(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)/i;
+  const amMatch  = t.match(amountRx);
+  if (!amMatch) return null;
+  const amount = parseAmount(amMatch[1] || amMatch[0]);
+  if (!amount || amount <= 0) return null;
+
+  // ── 3. BUILD DESCRIPTION ────────────────────────────────
+  const NOISE = /\b(entrada|saida|saída|salario|salário|recebi|recebo|ganhei|paguei|gastei|comprei|r\$|reais|mil\s+reais|mil)\b/gi;
+  let desc = t
+    .replace(amMatch[0], "")
+    .replace(NOISE, " ")
+    .replace(/[-:]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!desc || desc.length < 2) desc = tipo === "entrada" ? "Entrada" : "Saída";
+  else desc = desc.charAt(0).toUpperCase() + desc.slice(1);
+
+  // ── 4. CATEGORY & ORIGIN ────────────────────────────────
+  const fullText = tl + " " + normalizeStr(desc);
+  const category = tipo === "entrada" ? detectCatIn(fullText) : detectCatOut(fullText);
+  const origin   = tl.includes("pix") ? "pix"
+    : tipo === "entrada" ? "transferencia"
+    : tl.includes("cartao")||tl.includes("credito") ? "cartao"
+    : tl.includes("debito") ? "debito"
+    : tl.includes("boleto") ? "boleto"
+    : "outro";
+
   return {
     id:     Date.now().toString() + Math.random().toString(36).slice(2,5),
-    tipo:   isIn ? "entrada" : "saida",
+    tipo,
     date:   new Date().toISOString().split("T")[0],
-    amount, category: cat, description: desc,
-    origin: tl.includes("pix") ? "pix" : isIn ? "transferencia" : "outro",
+    amount,
+    category,
+    description: desc,
+    origin,
     source: "telegram"
   };
 }
