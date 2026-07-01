@@ -274,8 +274,27 @@ nav a.active{color:var(--t);border-left-color:var(--blue);}
   letter-spacing:.3px;white-space:nowrap;
 }
 .badge-in{background:rgba(37,99,235,.1);color:#60a5fa;}
-.badge-out{background:rgba(255,255,255,.05);color:var(--t3);}
+.badge-out{background:rgba(255,255,255,.05);color:var(--t3);cursor:pointer;transition:background .12s;}
+.badge-out:hover{background:rgba(255,255,255,.12);color:var(--t);}
 .badge-pix{background:rgba(16,163,127,.1);color:#34d399;}
+
+/* CAT DROPDOWN */
+.cat-drop{
+  position:absolute;z-index:100;
+  background:var(--s2);border:1px solid var(--bd2);
+  border-radius:var(--r);padding:4px;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+  min-width:150px;
+}
+.cat-drop button{
+  display:block;width:100%;text-align:left;
+  background:none;border:none;color:var(--t2);
+  font-size:12px;font-family:var(--sans);
+  padding:6px 10px;border-radius:4px;cursor:pointer;
+  transition:background .1s;
+}
+.cat-drop button:hover{background:var(--s3);color:var(--t);}
+.cat-drop button.active{color:var(--blue);}
 .tx-amount{
   font-family:var(--mono);font-size:13px;font-weight:500;
   text-align:right;white-space:nowrap;
@@ -1067,16 +1086,66 @@ function txRow(tx) {
     ? '<span class="tx-badge badge-pix">PIX</span>'
     : isIn
     ? '<span class="tx-badge badge-in">Entrada</span>'
-    : `<span class="tx-badge badge-out">${cap(tx.category)}</span>`;
+    : `<span class="tx-badge badge-out" onclick="openCatDrop(event,'${tx.id}')" title="Clica para alterar categoria">${cap(tx.category)} ▾</span>`;
   return `<tr id="tx-${tx.id}">
-    <td>
-      <div class="tx-desc">${tx.description || cap(tx.category)}</div>
-    </td>
+    <td><div class="tx-desc">${tx.description || cap(tx.category)}</div></td>
     <td><span class="tx-meta">${fmtDate(tx.date)}</span></td>
-    <td>${badge}</td>
+    <td style="position:relative">${badge}</td>
     <td><span class="tx-amount ${isIn?"pos":"neg"}">${isIn?"+":"-"}${fmtR(tx.amount)}</span></td>
     <td><button class="tx-del" onclick="delTx('${tx.id}')">✕</button></td>
   </tr>`;
+}
+
+const ALL_CATS_OUT = ["alimentação","casa","transporte","saúde","lazer","investimento","casamento","educação","vestuário","outros"];
+
+function openCatDrop(e, txId) {
+  e.stopPropagation();
+  // Remove any existing dropdown
+  document.querySelectorAll(".cat-drop").forEach(el => el.remove());
+
+  const tx = S.getTx().find(t => t.id === txId);
+  if (!tx) return;
+
+  const drop = document.createElement("div");
+  drop.className = "cat-drop";
+  drop.style.top  = (e.target.offsetHeight + 4) + "px";
+  drop.style.left = "0";
+
+  ALL_CATS_OUT.forEach(cat => {
+    const btn = document.createElement("button");
+    btn.textContent = cap(cat);
+    if (cat === tx.category) btn.className = "active";
+    btn.onclick = (ev) => { ev.stopPropagation(); changeCat(txId, cat); drop.remove(); };
+    drop.appendChild(btn);
+  });
+
+  e.target.parentElement.appendChild(drop);
+
+  // Close on outside click
+  setTimeout(() => document.addEventListener("click", function h() {
+    drop.remove(); document.removeEventListener("click", h);
+  }), 50);
+}
+
+async function changeCat(txId, newCat) {
+  const all = S.getTx();
+  const tx  = all.find(t => t.id === txId);
+  if (!tx) return;
+  tx.category = newCat;
+  S.saveTx(all);
+  if (SERVER_MODE) {
+    // Delete old + re-create with new category
+    await fetch(API+"/api/transactions/"+txId, {
+      method:"DELETE", headers:{"Authorization":"Bearer "+authToken}
+    }).catch(()=>{});
+    await fetch(API+"/api/transactions", {
+      method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+authToken},
+      body: JSON.stringify(tx)
+    }).catch(()=>{});
+  }
+  render();
+  toast("Categoria alterada para " + cap(newCat), "success");
 }
 
 function renderHist() {
