@@ -190,8 +190,11 @@ nav a .ico{width:16px;text-align:center;font-size:13px;}
 .badge-gold{background:rgba(194,163,93,.12);color:var(--gold);}
 .tx-amount{font-family:var(--mono);font-size:13px;font-weight:500;text-align:right;white-space:nowrap;}
 .tx-amount.pos{color:var(--pos);} .tx-amount.neg{color:var(--t);} .tx-amount.acc{color:#60a5fa;}
-.tx-del{background:none;border:none;color:var(--t4);cursor:pointer;font-size:14px;padding:4px;transition:color .12s;display:block;margin-left:auto;}
-.tx-del:hover{color:var(--neg);}
+.tx-acts{display:flex;gap:2px;justify-content:flex-end;}
+.tx-del{background:none;border:none;color:var(--t4);cursor:pointer;font-size:14px;padding:4px 6px;border-radius:4px;transition:all .12s;}
+.tx-del:hover{color:var(--neg);background:rgba(220,38,38,.1);}
+.tx-edit{background:none;border:none;color:var(--t4);cursor:pointer;font-size:12px;padding:4px 6px;border-radius:4px;transition:all .12s;}
+.tx-edit:hover{color:var(--blue);background:rgba(37,99,235,.12);}
 .src-dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--t4);margin-right:5px;vertical-align:middle;}
 .src-dot.whatsapp{background:#25d366;} .src-dot.telegram{background:#29a9eb;}
 
@@ -1106,7 +1109,10 @@ function txRow(t) {
     <td>${badge}</td>
     <td class="c-date">${fmtDate(t.date)}</td>
     <td class="tx-amount ${amountCls} c-amount">${sign} ${fmtRs(t.amount)}</td>
-    <td class="c-del"><button class="tx-del" onclick="delTx(${t.id})" title="Apagar">×</button></td>
+    <td class="c-del"><div class="tx-acts">
+      <button class="tx-edit" onclick="openEditTx(${t.id})" title="Editar">✎</button>
+      <button class="tx-del" onclick="delTx(${t.id})" title="Apagar">×</button>
+    </div></td>
   </tr>`;
 }
 
@@ -1361,6 +1367,8 @@ async function deleteAcc(id, name) {
    MODAL DE MOVIMENTO
 ══════════════════════════════════════════════════════ */
 let mTipo = "saida", mCat = "outros", mAccountId = null;
+// null = a criar; com id = a editar um movimento existente.
+let editingId = null;
 
 function buildPickers() {
   const orig = document.getElementById("m-origin");
@@ -1412,12 +1420,14 @@ function fillAccountSelect(tipo) {
 }
 
 function openTxModal(tipo = "saida", kindFilter = null, accountId = null) {
+  editingId = null;
   mAccountId = accountId;
-  mCat = tipo === "entrada" ? "outros" : "outros";
+  mCat = "outros";
   document.getElementById("m-amount").value = "";
   document.getElementById("m-desc").value = "";
   document.getElementById("m-date").value = new Date().toISOString().slice(0, 10);
   document.getElementById("tx-modal-title").textContent = "Novo movimento";
+  document.getElementById("m-save").textContent = "Guardar";
 
   if (kindFilter && !accountId) {
     const first = D.accounts.find((a) => a.kind === kindFilter);
@@ -1427,7 +1437,35 @@ function openTxModal(tipo = "saida", kindFilter = null, accountId = null) {
   document.getElementById("tx-modal").classList.add("open");
   setTimeout(() => document.getElementById("m-amount").focus(), 120);
 }
-function closeTxModal() { document.getElementById("tx-modal").classList.remove("open"); }
+
+// Abre o mesmo modal já preenchido, para corrigir um movimento.
+// Serve sobretudo para arrumar o que o WhatsApp interpretou mal.
+function openEditTx(id) {
+  const t = [...D.transactions, ...D.all].find((x) => x.id === id);
+  if (!t) { toast("Movimento não encontrado.", "error"); return; }
+
+  editingId = id;
+  mAccountId = t.account_id || null;
+  mCat = ACC_TIPOS.includes(t.tipo) ? "outros" : t.category;
+
+  document.getElementById("m-amount").value = fmtRs(t.amount);
+  document.getElementById("m-desc").value = t.description || "";
+  document.getElementById("m-date").value = String(t.date).slice(0, 10);
+  document.getElementById("tx-modal-title").textContent = "Editar movimento";
+  document.getElementById("m-save").textContent = "Guardar alterações";
+
+  setTxType(t.tipo);
+  if (!ACC_TIPOS.includes(t.tipo)) {
+    document.getElementById("m-origin").value = t.origin || "outro";
+  }
+  document.getElementById("tx-modal").classList.add("open");
+  setTimeout(() => document.getElementById("m-amount").focus(), 120);
+}
+
+function closeTxModal() {
+  editingId = null;
+  document.getElementById("tx-modal").classList.remove("open");
+}
 
 async function submitTx() {
   const btn = document.getElementById("m-save");
@@ -1457,9 +1495,13 @@ async function submitTx() {
     source: "manual",
   };
 
+  const editar = editingId;
+  const label = editar ? "Guardar alterações" : "Guardar";
   btn.disabled = true; btn.textContent = "A guardar…";
   try {
-    await api("/transactions", { method: "POST", body });
+    if (editar) await api("/transactions/" + editar, { method: "PATCH", body });
+    else await api("/transactions", { method: "POST", body });
+
     closeTxModal();
     D.reserve = null; D.investments = null;
     await refresh();
@@ -1467,11 +1509,11 @@ async function submitTx() {
     if (active === "p-reserva") loadReserve();
     if (active === "p-investimentos") loadInvest();
     if (active === "p-movimentos") loadHist();
-    toast("Registado.");
+    toast(editar ? "Movimento corrigido." : "Registado.");
   } catch (e) {
     toast(e.message, "error");
   } finally {
-    btn.disabled = false; btn.textContent = "Guardar";
+    btn.disabled = false; btn.textContent = label;
   }
 }
 

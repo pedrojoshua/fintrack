@@ -178,7 +178,10 @@ router.post("/transactions", wrap(async (req, res) => {
 
 router.patch("/transactions/:id", wrap(async (req, res) => {
   const id = Number(req.params.id);
-  const owned = await db.one("SELECT id, tipo FROM transactions WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  const owned = await db.one(
+    "SELECT id, tipo, category, account_id FROM transactions WHERE id = $1 AND user_id = $2",
+    [id, req.user.id]
+  );
   if (!owned) return res.status(404).json({ error: "Movimento não encontrado." });
 
   const sets = [];
@@ -196,10 +199,33 @@ router.patch("/transactions/:id", wrap(async (req, res) => {
     if (!d) return res.status(400).json({ error: "Data inválida." });
     push("date", d);
   }
-  // A categoria de movimentos de conta é fixa pelo tipo; não se edita.
-  if (b.category !== undefined && !ACCOUNT_TIPOS.includes(owned.tipo)) push("category", clean(b.category, 40));
   if (b.description !== undefined) push("description", clean(b.description, 200));
   if (b.origin !== undefined) push("origin", clean(b.origin, 30));
+
+  // Corrigir o tipo é o caso mais comum: o parser leu uma entrada como saída.
+  // Trocar de/para movimento de conta arrasta a conta e a categoria juntas.
+  const novoTipo = b.tipo !== undefined ? b.tipo : owned.tipo;
+  if (b.tipo !== undefined && !TIPOS.includes(b.tipo)) {
+    return res.status(400).json({ error: "Tipo inválido." });
+  }
+
+  if (ACCOUNT_TIPOS.includes(novoTipo)) {
+    const accountId = Number(b.account_id ?? owned.account_id);
+    if (!accountId) return res.status(400).json({ error: "Escolhe a conta para este movimento." });
+    const acc = await db.one("SELECT id FROM accounts WHERE id = $1 AND user_id = $2", [accountId, req.user.id]);
+    if (!acc) return res.status(404).json({ error: "Conta não encontrada." });
+
+    if (accountId !== owned.account_id) push("account_id", accountId);
+    // Movimentos de conta não têm categoria de gasto — a categoria é o próprio tipo.
+    if (novoTipo !== owned.category) push("category", novoTipo);
+  } else {
+    // Virou entrada/saída: larga a conta e passa a ter categoria normal.
+    if (owned.account_id !== null) push("account_id", null);
+    if (b.category !== undefined) push("category", clean(b.category, 40) || "outros");
+    else if (ACCOUNT_TIPOS.includes(owned.tipo)) push("category", "outros");
+  }
+
+  if (b.tipo !== undefined && b.tipo !== owned.tipo) push("tipo", b.tipo);
 
   if (!sets.length) return res.status(400).json({ error: "Nada para atualizar." });
 

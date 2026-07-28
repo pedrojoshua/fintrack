@@ -81,7 +81,9 @@ function extractDate(text) {
 const RX_RENDIMENTO = /\b(rendeu|rendimento|rendimentos|juros|dividendo|dividendos|proventos|jcp)\b/i;
 const RX_RESGATE    = /\b(resgatei|resgate|resgatar|retirei|retirada|tirei|saquei|saque)\b/i;
 const RX_APORTE     = /\b(guardei|guardar|poupei|poupar|investi|investir|apliquei|aplicar|aporte|aportei|separei)\b/i;
-const RX_ENTRADA    = /\b(entrada|recebi|recebido|ganhei|salario|salário|deposito|depósito|depositaram|caiu|creditou|credito na conta)\b/i;
+// "saldo"/"saldo atual" contam como entrada: é dinheiro que está com a pessoa,
+// não uma despesa.
+const RX_ENTRADA    = /\b(entrada|entrou|recebi|recebido|recebimento|ganhei|salario|salário|deposito|depósito|depositaram|caiu|creditou|credito na conta|saldo|sobrou|sobra|tenho|possuo|positivo)\b/i;
 
 function detectTipo(text) {
   if (RX_RENDIMENTO.test(text)) return "rendimento";
@@ -133,7 +135,8 @@ function matchAccount(hint, accounts) {
 const NOISE = new RegExp(
   "\\b(" +
   "entrada|saida|saída|salario|salário|recebi|recebido|recebemos|ganhei|paguei|pagar|gastei|gasto|" +
-  "comprei|compra|reais|real|conta|de|do|da|dos|das|no|na|nos|nas|em|com|por|pra|para|o|a|os|as|um|uma|" +
+  // "reias"/"reias" são erros de digitação comuns no telemóvel
+  "comprei|compra|reais|reias|reai|real|rs|conta|de|do|da|dos|das|no|na|nos|nas|em|com|por|pra|para|o|a|os|as|um|uma|" +
   "guardei|guardar|poupei|investi|investir|apliquei|aporte|aportei|separei|" +
   "resgatei|resgate|retirei|tirei|saquei|rendeu|rendimento|juros|" +
   "deposito|depósito|caiu|foi|fiz|" +
