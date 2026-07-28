@@ -117,10 +117,19 @@ async function logout() {
 }
 
 // Número do dono da instância (para reconhecer a conversa consigo mesmo).
-async function ownerNumber() {
+// Em cache: seria uma chamada HTTP por cada mensagem recebida.
+let ownerCache = { number: null, at: 0 };
+const OWNER_TTL = 5 * 60 * 1000;
+
+async function ownerNumber({ fresh = false } = {}) {
+  if (!fresh && ownerCache.number && Date.now() - ownerCache.at < OWNER_TTL) {
+    return ownerCache.number;
+  }
   const inst = await fetchInstance();
   const jid = inst?.ownerJid || inst?.owner || inst?.wuid || null;
-  return jid ? jidNumber(jid) : null;
+  const number = jid ? jidNumber(jid) : null;
+  if (number) ownerCache = { number, at: Date.now() };
+  return number;
 }
 
 // ── Receção ──────────────────────────────────────────
@@ -165,9 +174,16 @@ async function handleWebhook(payload) {
     if (!text) continue;
 
     const from = jidNumber(remoteJid);
-    const owner = await ownerNumber();
-    // Conversa consigo mesmo: destinatário é o próprio número da instância.
-    if (owner && from !== owner) continue;
+    // Conversa consigo mesmo: o destinatário é o próprio número da instância.
+    // Se não conseguirmos confirmar quem é o dono, ignoramos — sem esta
+    // verificação, qualquer mensagem enviada a qualquer pessoa viraria um gasto.
+    let owner = await ownerNumber();
+    if (!owner) owner = await ownerNumber({ fresh: true });
+    if (!owner) {
+      console.warn("WhatsApp: dono da instância desconhecido — mensagem ignorada.");
+      continue;
+    }
+    if (from !== owner) continue;
 
     const user = await resolveUser(from);
     if (!user) continue;
