@@ -3,9 +3,9 @@
   "configurations": [
     {
       "name": "fintrack",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["app.py"],
-      "port": 5000
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
     }
   ]
 }
