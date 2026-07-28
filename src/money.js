@@ -223,9 +223,16 @@ async function getSummary(userId, month, year) {
   const budgets = await db.query("SELECT category, amount FROM budgets WHERE user_id = $1", [userId]);
   const budgetMap = Object.fromEntries(budgets.map((b) => [b.category, round2(b.amount)]));
 
+  // O salário fixo declarado no planeamento é a referência de rendimento.
+  // O campo manual das definições fica como alternativa para quem não o usa.
+  const rendaFixa = await fixedIncome(userId);
+  const rendaPrevista = rendaFixa || round2(cfg.monthly_income);
+
   return {
     month, year,
     entradas, saidas, aportes, resgates,
+    renda_fixa: rendaFixa,
+    renda_prevista: rendaPrevista,
     saldo_livre: livre,
     // quanto do que entrou foi poupado
     taxa_poupanca: entradas > 0 ? round2(((aportes - resgates) / entradas) * 100) : 0,
@@ -248,9 +255,74 @@ async function getSummary(userId, month, year) {
   };
 }
 
+// ── Planeamento do mês ───────────────────────────────
+// Junta o que se repete todos os meses (fixos) com o que só existe naquele
+// mês (fatura do cartão e gastos pontuais previstos).
+async function getPlanned(userId, month, year) {
+  const ref = `${year}-${String(month).padStart(2, "0")}-01`;
+
+  // Traz também os pausados: se desaparecessem da lista não haveria como
+  // voltar a ligá-los. Só não entram nas somas.
+  const rows = await db.query(
+    `SELECT * FROM planned
+      WHERE user_id = $1
+        AND (modo = 'fixo' OR ref_month = $2::date)
+      ORDER BY modo, tipo, active DESC, due_day NULLS LAST, name`,
+    [userId, ref]
+  );
+
+  const norm = (r) => ({ ...r, amount: round2(r.amount) });
+  const fixos = rows.filter((r) => r.modo === "fixo").map(norm);
+  const cartao = rows.filter((r) => r.modo === "cartao").map(norm);
+  const avulso = rows.filter((r) => r.modo === "avulso").map(norm);
+
+  const sum = (list) => round2(list.filter((r) => r.active).reduce((s, r) => s + Number(r.amount), 0));
+  const receitasFixas = sum(fixos.filter((r) => r.tipo === "entrada"));
+  const despesasFixas = sum(fixos.filter((r) => r.tipo === "saida"));
+  const totalCartao = sum(cartao);
+  const totalAvulso = sum(avulso.filter((r) => r.tipo === "saida"));
+  const avulsoEntrada = sum(avulso.filter((r) => r.tipo === "entrada"));
+
+  // Fatura separada por cartão, para saber quanto vem de cada um.
+  const porCartao = {};
+  for (const c of cartao.filter((r) => r.active)) {
+    const nome = c.card_name || "Cartão";
+    porCartao[nome] = round2((porCartao[nome] || 0) + Number(c.amount));
+  }
+
+  const previsto = round2(
+    receitasFixas + avulsoEntrada - despesasFixas - totalCartao - totalAvulso
+  );
+
+  return {
+    month, year,
+    fixos, cartao, avulso,
+    receitas_fixas: receitasFixas,
+    despesas_fixas: despesasFixas,
+    total_cartao: totalCartao,
+    total_avulso: totalAvulso,
+    entradas_avulsas: avulsoEntrada,
+    total_previsto_saidas: round2(despesasFixas + totalCartao + totalAvulso),
+    total_previsto_entradas: round2(receitasFixas + avulsoEntrada),
+    sobra_prevista: previsto,
+    por_cartao: Object.entries(porCartao).map(([name, total]) => ({ name, total })),
+  };
+}
+
+// Soma das receitas fixas ativas — é o "salário fixo" do utilizador.
+async function fixedIncome(userId) {
+  const row = await db.one(
+    `SELECT COALESCE(SUM(amount), 0) AS total FROM planned
+      WHERE user_id = $1 AND modo = 'fixo' AND tipo = 'entrada' AND active = true`,
+    [userId]
+  );
+  return round2(row.total);
+}
+
 module.exports = {
   DEFAULT_SETTINGS, round2,
   getSettings, saveSettings,
   getAccounts, getReserve, getInvestments,
   getSummary, averageMonthlyExpense,
+  getPlanned, fixedIncome,
 };

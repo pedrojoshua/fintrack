@@ -107,6 +107,37 @@ CREATE TABLE IF NOT EXISTS budgets (
   PRIMARY KEY (user_id, category)
 );
 
+-- Planeamento: o que ainda não aconteceu mas já é esperado.
+--   fixo   → repete todos os meses (salário, aluguel, internet)
+--   cartao → cai numa fatura concreta; parcelas viram uma linha por mês
+--   avulso → gasto previsto só naquele mês
+CREATE TABLE IF NOT EXISTS planned (
+  id             SERIAL PRIMARY KEY,
+  user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  tipo           TEXT NOT NULL CHECK (tipo IN ('entrada','saida')),
+  modo           TEXT NOT NULL CHECK (modo IN ('fixo','cartao','avulso')),
+  name           TEXT NOT NULL,
+  amount         NUMERIC(14,2) NOT NULL CHECK (amount > 0),
+  category       TEXT NOT NULL DEFAULT 'outros',
+  due_day        INTEGER CHECK (due_day BETWEEN 1 AND 31),
+  ref_month      DATE,
+  card_name      TEXT NOT NULL DEFAULT '',
+  installments   INTEGER NOT NULL DEFAULT 1,
+  installment_no INTEGER NOT NULL DEFAULT 1,
+  group_id       TEXT,
+  active         BOOLEAN NOT NULL DEFAULT true,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- item fixo precisa de dia; item de mês precisa do mês
+  CONSTRAINT planned_shape CHECK (
+    (modo = 'fixo' AND ref_month IS NULL)
+    OR (modo IN ('cartao','avulso') AND ref_month IS NOT NULL)
+  )
+);
+
+CREATE INDEX IF NOT EXISTS planned_user_idx  ON planned (user_id, modo);
+CREATE INDEX IF NOT EXISTS planned_month_idx ON planned (user_id, ref_month);
+CREATE INDEX IF NOT EXISTS planned_group_idx ON planned (group_id);
+
 CREATE INDEX IF NOT EXISTS tx_user_date_idx    ON transactions (user_id, date DESC);
 CREATE INDEX IF NOT EXISTS tx_account_idx      ON transactions (account_id);
 CREATE INDEX IF NOT EXISTS accounts_user_idx   ON accounts (user_id) WHERE archived = false;

@@ -1,6 +1,7 @@
 // Rotas HTTP da aplicação. Tudo abaixo de /api exige token, exceto auth e status.
 
 const express = require("express");
+const crypto = require("crypto");
 const db = require("./db");
 const auth = require("./auth");
 const money = require("./money");
@@ -319,6 +320,143 @@ router.get("/summary", wrap(async (req, res) => {
 
 router.get("/reserve", wrap(async (req, res) => res.json(await money.getReserve(req.user.id))));
 router.get("/investments", wrap(async (req, res) => res.json(await money.getInvestments(req.user.id))));
+
+// ── Planeamento (fixos, cartão, previstos) ───────────
+const MODOS = ["fixo", "cartao", "avulso"];
+
+router.get("/planned", wrap(async (req, res) => {
+  const now = new Date();
+  const month = Number(req.query.month) || now.getMonth() + 1;
+  const year = Number(req.query.year) || now.getFullYear();
+  if (month < 1 || month > 12) return res.status(400).json({ error: "Mês inválido." });
+  res.json(await money.getPlanned(req.user.id, month, year));
+}));
+
+router.post("/planned", wrap(async (req, res) => {
+  const b = req.body || {};
+  const tipo = b.tipo === "entrada" ? "entrada" : "saida";
+  if (!MODOS.includes(b.modo)) return res.status(400).json({ error: "Modo inválido." });
+
+  const name = clean(b.name, 80);
+  if (!name) return res.status(400).json({ error: "Dá um nome ao lançamento." });
+
+  const total = parseAmount(b.amount);
+  if (total === null) return res.status(400).json({ error: "Valor tem de ser maior que zero." });
+
+  const category = clean(b.category, 40) || "outros";
+
+  if (b.modo === "fixo") {
+    const day = Number(b.due_day) || 1;
+    if (day < 1 || day > 31) return res.status(400).json({ error: "Dia do mês inválido." });
+    const row = await db.one(
+      `INSERT INTO planned (user_id, tipo, modo, name, amount, category, due_day)
+       VALUES ($1,$2,'fixo',$3,$4,$5,$6) RETURNING *`,
+      [req.user.id, tipo, name, total, category, day]
+    );
+    return res.status(201).json([row]);
+  }
+
+  // Mês de referência
+  const month = Number(b.month), year = Number(b.year);
+  if (!month || !year || month < 1 || month > 12) {
+    return res.status(400).json({ error: "Indica o mês do lançamento." });
+  }
+
+  const parcelas = Math.min(Math.max(Number(b.installments) || 1, 1), 72);
+  const cardName = clean(b.card_name, 40);
+
+  // Compra parcelada vira uma linha por fatura, para cada mês saber o que deve.
+  // O resto da divisão vai na primeira parcela, como fazem as operadoras.
+  const base = Math.floor((total / parcelas) * 100) / 100;
+  const resto = Math.round((total - base * parcelas) * 100) / 100;
+  const groupId = parcelas > 1 ? crypto.randomUUID() : null;
+
+  const rows = [];
+  for (let i = 0; i < parcelas; i++) {
+    const d = new Date(Date.UTC(year, month - 1 + i, 1));
+    const ref = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-01`;
+    const valor = i === 0 ? Math.round((base + resto) * 100) / 100 : base;
+
+    rows.push(await db.one(
+      `INSERT INTO planned
+         (user_id, tipo, modo, name, amount, category, ref_month, card_name, installments, installment_no, group_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7::date,$8,$9,$10,$11) RETURNING *`,
+      [req.user.id, tipo, b.modo, name, valor, category, ref, cardName, parcelas, i + 1, groupId]
+    ));
+  }
+  res.status(201).json(rows);
+}));
+
+router.patch("/planned/:id", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const owned = await db.one("SELECT id FROM planned WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!owned) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+  const sets = [];
+  const params = [];
+  const push = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+
+  const b = req.body || {};
+  if (b.name !== undefined) push("name", clean(b.name, 80));
+  if (b.category !== undefined) push("category", clean(b.category, 40) || "outros");
+  if (b.card_name !== undefined) push("card_name", clean(b.card_name, 40));
+  if (b.active !== undefined) push("active", !!b.active);
+  if (b.amount !== undefined) {
+    const a = parseAmount(b.amount);
+    if (a === null) return res.status(400).json({ error: "Valor inválido." });
+    push("amount", a);
+  }
+  if (b.due_day !== undefined) {
+    const d = Number(b.due_day);
+    if (!(d >= 1 && d <= 31)) return res.status(400).json({ error: "Dia do mês inválido." });
+    push("due_day", d);
+  }
+  if (!sets.length) return res.status(400).json({ error: "Nada para atualizar." });
+
+  params.push(id, req.user.id);
+  const row = await db.one(
+    `UPDATE planned SET ${sets.join(", ")}
+      WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
+  res.json(row);
+}));
+
+// ?todas=1 apaga o parcelamento inteiro, não só aquela parcela.
+router.delete("/planned/:id", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const row = await db.one("SELECT id, group_id FROM planned WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!row) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+  if (req.query.todas === "1" && row.group_id) {
+    const gone = await db.query(
+      "DELETE FROM planned WHERE group_id = $1 AND user_id = $2 RETURNING id",
+      [row.group_id, req.user.id]
+    );
+    return res.json({ ok: true, removidos: gone.length });
+  }
+  await db.query("DELETE FROM planned WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  res.json({ ok: true, removidos: 1 });
+}));
+
+// Transforma um lançamento previsto num movimento real já acontecido.
+router.post("/planned/:id/confirmar", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const p = await db.one("SELECT * FROM planned WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!p) return res.status(404).json({ error: "Lançamento não encontrado." });
+
+  const date = parseDate(req.body?.date) || new Date().toISOString().slice(0, 10);
+  const tx = await db.one(
+    `INSERT INTO transactions (user_id, date, tipo, amount, category, description, origin, source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'planeamento') RETURNING *`,
+    [req.user.id, date, p.tipo, p.amount, p.category, p.name,
+     p.modo === "cartao" ? "crédito" : "outro"]
+  );
+
+  // Um fixo continua a valer nos meses seguintes; um previsto pontual esgota-se.
+  if (p.modo !== "fixo") await db.query("DELETE FROM planned WHERE id = $1", [id]);
+  res.status(201).json(tx);
+}));
 
 // ── Definições e orçamentos ──────────────────────────
 router.get("/settings", wrap(async (req, res) => res.json(await money.getSettings(req.user.id))));
