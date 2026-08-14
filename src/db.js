@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   id              SERIAL PRIMARY KEY,
   user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name            TEXT NOT NULL,
-  kind            TEXT NOT NULL CHECK (kind IN ('reserva','investimento','meta')),
+  kind            TEXT NOT NULL CHECK (kind IN ('corrente','reserva','investimento','meta')),
   institution     TEXT DEFAULT '',
   goal            NUMERIC(14,2) DEFAULT 0,
   expected_yield  NUMERIC(6,2) DEFAULT 0,
@@ -137,6 +137,12 @@ CREATE TABLE IF NOT EXISTS planned (
 CREATE INDEX IF NOT EXISTS planned_user_idx  ON planned (user_id, modo);
 CREATE INDEX IF NOT EXISTS planned_month_idx ON planned (user_id, ref_month);
 CREATE INDEX IF NOT EXISTS planned_group_idx ON planned (group_id);
+
+-- Bancos criados antes da conta corrente têm o CHECK antigo, que recusa
+-- 'corrente'. Recriar a restrição é idempotente e não toca nos dados.
+ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_kind_check;
+ALTER TABLE accounts ADD CONSTRAINT accounts_kind_check
+  CHECK (kind IN ('corrente','reserva','investimento','meta'));
 
 CREATE INDEX IF NOT EXISTS tx_user_date_idx    ON transactions (user_id, date DESC);
 CREATE INDEX IF NOT EXISTS tx_account_idx      ON transactions (account_id);

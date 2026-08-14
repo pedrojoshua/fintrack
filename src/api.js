@@ -10,7 +10,7 @@ const cats = require("./categories");
 const router = express.Router();
 
 const TIPOS = ["entrada", "saida", "aporte", "resgate", "rendimento"];
-const KINDS = ["reserva", "investimento", "meta"];
+const KINDS = ["corrente", "reserva", "investimento", "meta"];
 const ACCOUNT_TIPOS = ["aporte", "resgate", "rendimento"];
 
 // ── Validação ────────────────────────────────────────
@@ -297,6 +297,35 @@ router.patch("/accounts/:id", wrap(async (req, res) => {
     params
   );
   res.json(row);
+}));
+
+// Informar o saldo real da conta.
+//
+// Não cria lançamento nenhum: ajusta o saldo de partida para que o saldo
+// calculado bata com o informado. Assim o mês não é poluído com um aporte
+// falso, e os lançamentos que já existem continuam valendo.
+router.post("/accounts/:id/saldo", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const acc = await db.one("SELECT id FROM accounts WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!acc) return res.status(404).json({ error: "Conta não encontrada." });
+
+  const declarado = Number(req.body?.balance);
+  if (!Number.isFinite(declarado)) return res.status(400).json({ error: "Informe o saldo da conta." });
+
+  // Quanto os lançamentos já movimentaram nesta conta.
+  const mov = await db.one(
+    `SELECT COALESCE(SUM(CASE tipo WHEN 'aporte' THEN amount WHEN 'rendimento' THEN amount
+                                  WHEN 'resgate' THEN -amount ELSE 0 END), 0) AS total
+       FROM transactions WHERE account_id = $1`,
+    [id]
+  );
+  const abertura = Math.round((declarado - Number(mov.total)) * 100) / 100;
+
+  const row = await db.one(
+    "UPDATE accounts SET opening_balance = $1 WHERE id = $2 AND user_id = $3 RETURNING *",
+    [abertura, id, req.user.id]
+  );
+  res.json({ ...row, balance: Math.round(declarado * 100) / 100 });
 }));
 
 // Excluir uma conta leva os seus lançamentos (ON DELETE CASCADE) — avisar no cliente.

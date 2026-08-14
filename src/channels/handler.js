@@ -4,8 +4,9 @@
 const db = require("../db");
 const money = require("../money");
 const ai = require("../ai");
+const lote = require("./lote");
 const { parseMessage } = require("../parser");
-const { iconFor } = require("../categories");
+const { iconFor, OUT, IN } = require("../categories");
 
 const brl = (v) =>
   "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -34,11 +35,21 @@ const AJUDA =
   "• `investi 1000 no tesouro selic`\n" +
   "• `resgatei 200 da reserva`\n" +
   "• `rendeu 15,40 no tesouro selic`\n\n" +
+  "*Vários de uma vez* (um por linha)\n" +
+  "```\nmercado 350\nuber 45\nfarmacia 89,90\n```\n" +
+  "*Planejar o mês que vem*\n" +
+  "```\nmês que vem:\naluguel 1200 todo mês\nipva 850\n```\n" +
+  "*Saldo da conta*\n" +
+  "• `saldo 1234,56` — informa quanto tem na conta\n" +
+  "• `saldo` — mostra o saldo atual\n\n" +
+  "*Se ele errar*\n" +
+  "Depois de cada lançamento aparecem as opções: responda *1* para trocar entre entrada e saída, *2* para trocar a categoria.\n\n" +
   "*Comandos*\n" +
   "/resumo — o mês em números\n" +
   "/reserva — reserva de emergência\n" +
   "/investimentos — carteira\n" +
   "/contas — suas contas\n" +
+  "/saldo — saldo em conta\n" +
   "/desfazer — apaga o último lançamento";
 
 // ── Comandos ─────────────────────────────────────────
@@ -205,6 +216,14 @@ async function confirmacao(userId, row) {
   }
   txt += `📅 ${dm(row.date)}`;
 
+  // Deixa o caminho da correção à vista. Sem isto, quem viu o bot classificar
+  // errado não sabe o que fazer além de abrir o app.
+  if (!row.account_id) {
+    const oposto = row.tipo === "entrada" ? "saída" : "entrada";
+    txt += `\n\n_Errado? Responda *1* se era ${oposto}, *2* para trocar a categoria._`;
+    await lote.guardarPendente(userId, { txId: row.id, etapa: "correcao", tipo: row.tipo });
+  }
+
   // Depois de uma despesa, mostrar o que ainda sobra no mês evita surpresas.
   if (row.tipo === "saida") {
     const now = new Date();
@@ -280,6 +299,105 @@ async function handleAudio(userId, base64, mimetype, source = "whatsapp") {
   return `🎤 _"${r.texto}"_\n\n${resposta}`;
 }
 
+// ── Correção por número ──────────────────────────────
+// O usuário acabou de ver o lançamento e responde só um número. Sem estado
+// guardado isto seria impossível — daí o "pendente".
+async function tratarCorrecao(userId, escolha, pend) {
+  const tx = await db.one("SELECT * FROM transactions WHERE id = $1 AND user_id = $2", [pend.txId, userId]);
+  if (!tx) { await lote.limparPendente(userId); return null; }
+
+  if (pend.etapa === "correcao") {
+    if (escolha === 1) {
+      const novo = tx.tipo === "entrada" ? "saida" : "entrada";
+      // A categoria pertence ao tipo: as de gasto não servem para entrada.
+      const lista = novo === "entrada" ? IN : OUT;
+      const cat = lista.find((c) => c.id === tx.category) ? tx.category : "outros";
+      const row = await db.one(
+        "UPDATE transactions SET tipo = $1, category = $2 WHERE id = $3 RETURNING *",
+        [novo, cat, tx.id]
+      );
+      await lote.limparPendente(userId);
+      const sinal = novo === "entrada" ? "+" : "−";
+      return `✅ Corrigido para *${novo === "entrada" ? "entrada" : "saída"}*\n${sinal} ${brl(row.amount)} — ${row.description}`;
+    }
+
+    if (escolha === 2) {
+      const lista = tx.tipo === "entrada" ? IN : OUT;
+      await lote.guardarPendente(userId, { txId: tx.id, etapa: "categoria", opcoes: lista.map((c) => c.id) });
+      return (
+        `📁 Qual categoria?\n\n` +
+        lista.map((c, i) => `*${i + 1}* ${c.icon} ${c.label}`).join("\n") +
+        `\n\n_Responda com o número._`
+      );
+    }
+    return null;
+  }
+
+  if (pend.etapa === "categoria") {
+    const cat = pend.opcoes[escolha - 1];
+    if (!cat) return `Número fora da lista. Responda de 1 a ${pend.opcoes.length}.`;
+    const row = await db.one("UPDATE transactions SET category = $1 WHERE id = $2 RETURNING *", [cat, tx.id]);
+    await lote.limparPendente(userId);
+    return `✅ Categoria alterada para ${iconFor(cat)} *${cat}*\n${brl(row.amount)} — ${row.description}`;
+  }
+  return null;
+}
+
+// ── Saldo da conta ───────────────────────────────────
+async function cmdSaldo(userId, texto) {
+  const contas = await money.getAccounts(userId);
+  const correntes = contas.filter((a) => a.kind === "corrente");
+
+  // Reusa o extrator do parser: escrever outro regex aqui já causou um bug
+  // em que "2500,50" virava 250 (faltava exigir o separador de milhar).
+  const { extractAmount } = require("../parser");
+  const m = extractAmount(texto.replace(/^\s*\/?saldo\b/i, ""));
+
+  // Sem valor é pergunta, não comando.
+  if (!m) {
+    if (!correntes.length) {
+      return "Você ainda não tem conta corrente.\n\nCrie em *Investir → + Conta* no app, ou diga o saldo aqui:\n`saldo 1234,56`";
+    }
+    return (
+      `🏦 *Saldo em conta*\n\n` +
+      correntes.map((a) => `• ${a.name}: *${brl(a.balance)}*`).join("\n") +
+      `\n\n_Para atualizar: \`saldo 1234,56\`_`
+    );
+  }
+
+  const valor = m.value;
+  if (!Number.isFinite(valor)) return "Não entendi o valor. Exemplo: `saldo 1234,56`";
+
+  // Sem conta corrente ainda, cria uma na hora — é o que a pessoa quer.
+  let conta = correntes[0];
+  if (!conta) {
+    conta = await db.one(
+      `INSERT INTO accounts (user_id, name, kind, institution) VALUES ($1,'Conta corrente','corrente','') RETURNING *`,
+      [userId]
+    );
+    conta.balance = 0;
+  }
+
+  // Ajusta o saldo de partida em vez de criar um lançamento falso, para o
+  // mês não ganhar uma entrada que nunca existiu.
+  const mov = await db.one(
+    `SELECT COALESCE(SUM(CASE tipo WHEN 'aporte' THEN amount WHEN 'rendimento' THEN amount
+                                  WHEN 'resgate' THEN -amount ELSE 0 END), 0) AS total
+       FROM transactions WHERE account_id = $1`,
+    [conta.id]
+  );
+  await db.query("UPDATE accounts SET opening_balance = $1 WHERE id = $2",
+    [Math.round((valor - Number(mov.total)) * 100) / 100, conta.id]);
+
+  const now = new Date();
+  const s = await money.getSummary(userId, now.getMonth() + 1, now.getFullYear());
+  return (
+    `🏦 *${conta.name}*: ${brl(valor)}\n\n` +
+    `📈 Património total: *${brl(s.patrimonio)}*\n` +
+    `_(conta + reserva + investimentos)_`
+  );
+}
+
 /**
  * Trata uma mensagem recebida de qualquer canal.
  * @param {number} userId
@@ -291,7 +409,19 @@ async function handleMessage(userId, text, source = "whatsapp") {
   const t = String(text || "").trim();
   if (!t) return null;
 
+  // Resposta de um número só: é escolha de menu, não lançamento.
+  const soNumero = /^\s*(\d{1,2})\s*$/.exec(t);
+  if (soNumero) {
+    const pend = await lote.lerPendente(userId);
+    if (pend) {
+      const r = await tratarCorrecao(userId, Number(soNumero[1]), pend);
+      if (r) return r;
+    }
+  }
+
   const cmd = t.toLowerCase().split(/\s+/)[0];
+  if (cmd === "saldo" || cmd === "/saldo") return cmdSaldo(userId, t);
+
   switch (cmd) {
     case "/start":
     case "/ajuda":
@@ -314,8 +444,47 @@ async function handleMessage(userId, text, source = "whatsapp") {
       return cmdDesfazer(userId);
   }
 
-  // Não é comando → tenter interpretar como lançamento.
+  // "Mês que vem ..." vai para o planejamento, não para o mês corrente.
+  if (lote.RX_PROXIMO.test(t)) {
+    return lote.ehLista(t) ? lote.planejarLote(userId, t) : planejarUm(userId, t);
+  }
+
+  // Várias linhas que o parser entende → lote de uma vez só.
+  if (lote.ehLista(t)) return lote.lancarLote(userId, t, source);
+
+  // Não é comando → tentar interpretar como lançamento.
   return registrar(userId, t, source);
+}
+
+// Um único item para o mês que vem.
+async function planejarUm(userId, texto) {
+  const p = parseMessage(texto.replace(lote.RX_PROXIMO, ""), []);
+  if (!p || (p.tipo !== "entrada" && p.tipo !== "saida")) {
+    return "❓ Não encontrei o valor.\n\nExemplo: `mês que vem ipva 850`";
+  }
+
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  const mes = d.getMonth() + 1, ano = d.getFullYear();
+  const fixo = /\b(todo m[êe]s|mensal|fixo|fixa|sempre|assinatura)\b/i.test(texto);
+
+  await db.one(
+    fixo
+      ? `INSERT INTO planned (user_id,tipo,modo,name,amount,category,due_day) VALUES ($1,$2,'fixo',$3,$4,$5,5) RETURNING id`
+      : `INSERT INTO planned (user_id,tipo,modo,name,amount,category,ref_month) VALUES ($1,$2,'avulso',$3,$4,$5,$6::date) RETURNING id`,
+    fixo
+      ? [userId, p.tipo, lote.limpaNome(p.description), p.amount, p.category]
+      : [userId, p.tipo, lote.limpaNome(p.description), p.amount, p.category, `${ano}-${String(mes).padStart(2, "0")}-01`]
+  );
+
+  const pl = await money.getPlanned(userId, mes, ano);
+  const nomeMes = new Date(ano, mes - 1, 1).toLocaleDateString("pt-BR", { month: "long" });
+  return (
+    `📅 *Planejado para ${nomeMes}*\n` +
+    `${iconFor(p.category)} ${p.tipo === "entrada" ? "+" : "−"} ${brl(p.amount)} — ${p.description}` +
+    (fixo ? " _(todo mês)_" : "") +
+    `\n\n💵 Sobra prevista: *${brl(pl.sobra_prevista)}*`
+  );
 }
 
 module.exports = { handleMessage, handleImage, handleAudio, AJUDA, brl };

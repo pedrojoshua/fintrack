@@ -219,6 +219,9 @@ async function getSummary(userId, month, year) {
 
   const accounts = await getAccounts(userId);
   const patrimonio = round2(accounts.reduce((s, a) => s + a.balance, 0));
+  // O que está na conta agora, separado do que está guardado.
+  const correntes = accounts.filter((a) => a.kind === "corrente");
+  const saldoCorrente = round2(correntes.reduce((s, a) => s + a.balance, 0));
 
   const budgets = await db.query("SELECT category, amount FROM budgets WHERE user_id = $1", [userId]);
   const budgetMap = Object.fromEntries(budgets.map((b) => [b.category, round2(b.amount)]));
@@ -233,6 +236,8 @@ async function getSummary(userId, month, year) {
     entradas, saidas, aportes, resgates,
     renda_fixa: rendaFixa,
     renda_prevista: rendaPrevista,
+    saldo_corrente: saldoCorrente,
+    tem_corrente: correntes.length > 0,
     saldo_livre: livre,
     // quanto do que entrou foi poupado
     taxa_poupanca: entradas > 0 ? round2(((aportes - resgates) / entradas) * 100) : 0,

@@ -80,10 +80,13 @@ function extractDate(text) {
 // ── Tipo de lançamento ────────────────────────────────
 const RX_RENDIMENTO = /\b(rendeu|rendimento|rendimentos|juros|dividendo|dividendos|proventos|jcp)\b/i;
 const RX_RESGATE    = /\b(resgatei|resgate|resgatar|retirei|retirada|tirei|saquei|saque)\b/i;
-const RX_APORTE     = /\b(guardei|guardar|poupei|poupar|investi|investir|apliquei|aplicar|aporte|aportei|separei)\b/i;
+const RX_APORTE     = /\b(guardei|guardar|poupei|poupar|investi|investir|apliquei|aplicar|aporte|aportei|separei|reservei)\b/i;
 // "saldo"/"saldo atual" contam como entrada: é dinheiro que está com a pessoa,
 // não uma despesa.
-const RX_ENTRADA    = /\b(entrada|entrou|recebi|recebido|recebimento|ganhei|salario|salário|deposito|depósito|depositaram|caiu|creditou|credito na conta|saldo|sobrou|sobra|tenho|possuo|positivo)\b/i;
+// "pagou" e "pagaram" são entrada (alguém me pagou); "paguei" é saída.
+// A diferença é só a pessoa do verbo, por isso a ordem das alternativas
+// e o \b importam aqui.
+const RX_ENTRADA    = /\b(entrada|entrou|recebi|recebido|recebimento|ganhei|salario|salário|deposito|depósito|depositaram|caiu|creditou|credito na conta|saldo|sobrou|sobra|tenho|possuo|positivo|vendi|venda|vendeu|vendas|pagou|pagaram|cobrei|comiss[ãa]o|lucro|freela|freelance|bico|reembolso|estorno|cashback|pr[êe]mio)\b/i;
 
 function detectTipo(text) {
   if (RX_RENDIMENTO.test(text)) return "rendimento";
