@@ -3,7 +3,7 @@
 
 const { Pool, types } = require("pg");
 
-// NUMERIC chega como string por omissão — converter para número.
+// NUMERIC chega como string por padrão — converter para número.
 types.setTypeParser(1700, (v) => (v === null ? null : parseFloat(v)));
 // DATE deve ficar como "YYYY-MM-DD"; deixar o driver criar um Date desloca o dia
 // consoante o fuso do servidor.
@@ -86,7 +86,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   source      TEXT NOT NULL DEFAULT 'manual',
   account_id  INTEGER REFERENCES accounts(id) ON DELETE CASCADE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  -- movimentos de conta obrigam a ter conta; entradas/saídas não têm
+  -- lançamentos de conta obrigam a ter conta; entradas/saídas não têm
   CONSTRAINT account_required CHECK (
     (tipo IN ('aporte','resgate','rendimento') AND account_id IS NOT NULL)
     OR (tipo IN ('entrada','saida'))

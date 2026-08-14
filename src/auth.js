@@ -50,7 +50,7 @@ function tokenFrom(req) {
   return header.startsWith("Bearer ") ? header.slice(7).trim() : null;
 }
 
-// Middleware: exige token válido e confirma que o utilizador ainda existe.
+// Middleware: exige token válido e confirma que o usuário ainda existe.
 async function requireAuth(req, res, next) {
   const claim = verifyToken(tokenFrom(req));
   if (!claim) return res.status(401).json({ error: "Não autenticado." });

@@ -1,6 +1,6 @@
 // Canal WhatsApp via Evolution API.
 //
-// Modelo de uso: a instância é ligada ao TEU próprio número. Escreves na
+// Modelo de uso: a instância é ligada ao TEU próprio número. Escrevas na
 // conversa "Mensagem para mim mesmo" e o FinTrack lê e responde ali.
 // Por isso só aceitamos mensagens com fromMe = true cuja conversa é o
 // próprio número da instância — ninguém de fora consegue lançar nada.
@@ -81,7 +81,7 @@ async function ensureInstance(webhookUrl) {
 }
 
 // O formato do endpoint de webhook mudou entre versões da Evolution:
-// tenta o formato aninhado (v2) e cai para o plano (v1).
+// tente o formato aninhado (v2) e cai para o plano (v1).
 async function setWebhook(url) {
   const events = ["MESSAGES_UPSERT"];
   const nested = await evo(`/webhook/set/${INSTANCE}`, {
@@ -102,7 +102,7 @@ async function connectionState() {
   return r.data?.instance?.state || r.data?.state || "desconhecido";
 }
 
-// Devolve o QR em base64 para o utilizador ler com o telemóvel.
+// Devolve o QR em base64 para o usuário ler com o celular.
 async function getQrCode() {
   const r = await evo(`/instance/connect/${INSTANCE}`);
   if (!r.ok) return null;
@@ -116,7 +116,7 @@ async function logout() {
   await evo(`/instance/logout/${INSTANCE}`, { method: "DELETE" });
 }
 
-// Número do dono da instância (para reconhecer a conversa consigo mesmo).
+// Número do dono da instância (para reconhecer a conversa com você mesmo).
 // Em cache: seria uma chamada HTTP por cada mensagem recebida.
 let ownerCache = { number: null, at: 0 };
 const OWNER_TTL = 5 * 60 * 1000;
@@ -159,7 +159,7 @@ function extractMedia(msg) {
   return null;
 }
 
-// O webhook não traz o ficheiro — pede-se à Evolution pelo id da mensagem.
+// O webhook não traz o arquivo — pede-se à Evolution pelo id da mensagem.
 async function downloadMedia(messageKey) {
   const r = await evo(`/chat/getBase64FromMediaMessage/${INSTANCE}`, {
     method: "POST",
@@ -191,7 +191,7 @@ async function handleWebhook(payload) {
     if (!msg?.key) continue;
 
     const { remoteJid, fromMe, id } = msg.key;
-    if (!fromMe) continue;                                   // só o dono escreve
+    if (!fromMe) continue;                                   // só o dono escreva
     if (String(remoteJid || "").includes("@g.us")) continue; // ignora grupos
     if (alreadySeen(id)) continue;
 
@@ -200,7 +200,7 @@ async function handleWebhook(payload) {
     if (!text && !media) continue;
 
     const from = jidNumber(remoteJid);
-    // Conversa consigo mesmo: o destinatário é o próprio número da instância.
+    // Conversa com você mesmo: o destinatário é o próprio número da instância.
     // Se não conseguirmos confirmar quem é o dono, ignoramos — sem esta
     // verificação, qualquer mensagem enviada a qualquer pessoa viraria um gasto.
     let owner = await ownerNumber();
@@ -220,11 +220,11 @@ async function handleWebhook(payload) {
       if (media) {
         // Ler imagem ou transcrever áudio demora alguns segundos — avisa,
         // senão parece que a mensagem se perdeu.
-        await sendText(from, media.kind === "image" ? "📷 A ler…" : "🎤 A ouvir…");
+        await sendText(from, media.kind === "image" ? "📷 Lendo…" : "🎤 Ouvindo…");
 
         const file = await downloadMedia(msg.key);
         if (!file) {
-          reply = "⚠️ Não consegui descarregar o ficheiro. Tenta enviar outra vez.";
+          reply = "⚠️ Não consegui descarregar o arquivo. Tente enviar outra vez.";
         } else if (media.kind === "image") {
           reply = await handleImage(user.id, file.base64, file.mimetype || media.mimetype, "whatsapp");
         } else {
@@ -237,12 +237,12 @@ async function handleWebhook(payload) {
       if (reply) await sendText(from, reply);
     } catch (err) {
       console.error("WhatsApp handler:", err.message);
-      await sendText(from, "⚠️ Deu erro ao registar. Tenta de novo daqui a pouco.");
+      await sendText(from, "⚠️ Deu erro ao registrar. Tente de novo daqui a pouco.");
     }
   }
 }
 
-// Liga o número à conta. Como a instância é o próprio número do utilizador e a
+// Liga o número à conta. Como a instância é o próprio número do usuário e a
 // app é de conta única, a primeira mensagem faz o emparelhamento.
 async function resolveUser(number) {
   const linked = await db.one("SELECT id, username FROM users WHERE whatsapp_jid = $1", [number]);
@@ -251,7 +251,7 @@ async function resolveUser(number) {
   const users = await db.query("SELECT id, username FROM users ORDER BY id LIMIT 2");
   if (users.length === 1) {
     await db.query("UPDATE users SET whatsapp_jid = $1 WHERE id = $2", [number, users[0].id]);
-    console.log(`📱 WhatsApp ligado à conta "${users[0].username}"`);
+    console.log(`📱 WhatsApp conectado à conta "${users[0].username}"`);
     return users[0];
   }
   return null;

@@ -1,4 +1,4 @@
-// Lógica partilhada entre WhatsApp e Telegram: comandos + registo por texto livre.
+// Lógica compartilhada entre WhatsApp e Telegram: comandos + registro por texto livre.
 // As respostas usam *negrito* ao estilo WhatsApp; o Telegram converte para HTML.
 
 const db = require("../db");
@@ -18,9 +18,9 @@ const dm = (iso) => {
 const AJUDA =
   "💰 *FinTrack*\n\n" +
   "*Sem digitar nada*\n" +
-  "📷 Manda a foto do cupom ou o print da notificação do banco\n" +
-  "↪️ Encaminha a mensagem que o banco te enviou\n" +
-  "🎤 Manda um áudio: \"gastei cinquenta no mercado\"\n\n" +
+  "📷 Mande a foto do cupom ou o print da notificação do banco\n" +
+  "↪️ Encaminhe a mensagem que o banco te enviou\n" +
+  "🎤 Mande um áudio: \"gastei cinquenta no mercado\"\n\n" +
   "*Escrevendo* (sem formato fixo)\n" +
   "• `50 mercado`\n" +
   "• `paguei 89,90 netflix`\n" +
@@ -38,7 +38,7 @@ const AJUDA =
   "/resumo — o mês em números\n" +
   "/reserva — reserva de emergência\n" +
   "/investimentos — carteira\n" +
-  "/contas — as tuas contas\n" +
+  "/contas — suas contas\n" +
   "/desfazer — apaga o último lançamento";
 
 // ── Comandos ─────────────────────────────────────────
@@ -54,7 +54,7 @@ async function cmdResumo(userId) {
     `🐖 Guardado: *${brl(s.aportes - s.resgates)}*\n` +
     `━━━━━━━━━━━━━\n` +
     `💵 Sobra livre: *${brl(s.saldo_livre)}*\n` +
-    `📈 Património: *${brl(s.patrimonio)}*`;
+    `📈 Patrimônio: *${brl(s.patrimonio)}*`;
 
   if (s.entradas > 0) txt += `\n🎯 Taxa de poupança: *${s.taxa_poupanca}%*`;
 
@@ -63,13 +63,13 @@ async function cmdResumo(userId) {
     txt += `\n\n*Onde foi o dinheiro*\n`;
     txt += top.map((c) => `${iconFor(c.category)} ${c.category}: ${brl(c.total)}`).join("\n");
   }
-  if (!s.count) txt += `\n\n_Ainda sem movimentos este mês._`;
+  if (!s.count) txt += `\n\n_Ainda sem lançamentos este mês._`;
   return txt;
 }
 
 async function cmdReserva(userId) {
   const r = await money.getReserve(userId);
-  if (!r.accounts.length) return "Ainda não tens conta de reserva. Cria uma no painel *Reserva* da app.";
+  if (!r.accounts.length) return "Você ainda não tem conta de reserva. Crie uma no painel *Reserva* do app.";
 
   const barras = Math.round(r.goal_pct / 10);
   const barra = "█".repeat(barras) + "░".repeat(10 - barras);
@@ -85,14 +85,14 @@ async function cmdReserva(userId) {
 
   if (r.months_to_target === 0) txt += `\n\n✅ *Meta atingida.*`;
   else if (r.months_to_target) txt += `\n\n⏳ No ritmo atual (${brl(r.monthly_pace)}/mês): *${r.months_to_target} meses*`;
-  else if (r.monthly_pace <= 0) txt += `\n\n⚠️ Não estás a aportar — a meta não avança.`;
+  else if (r.monthly_pace <= 0) txt += `\n\n⚠️ Você não está aportando — a meta não avança.`;
   return txt;
 }
 
 async function cmdInvestimentos(userId) {
   const inv = await money.getInvestments(userId);
   if (!inv.accounts.length && !inv.goals.length) {
-    return "Ainda não tens investimentos. Cria uma conta no painel *Investimentos* da app.";
+    return "Você ainda não tem investimentos. Crie uma conta no painel *Investimentos* do app.";
   }
 
   let txt = `📈 *Carteira*\n\nTotal: *${brl(inv.total_balance)}*\n`;
@@ -115,10 +115,10 @@ async function cmdInvestimentos(userId) {
 
 async function cmdContas(userId) {
   const accounts = await money.getAccounts(userId);
-  if (!accounts.length) return "Ainda não tens contas criadas.";
+  if (!accounts.length) return "Você ainda não tem contas criadas.";
   const emoji = { reserva: "🛟", investimento: "📈", meta: "🎯" };
   return (
-    `🗂 *As tuas contas*\n\n` +
+    `🗂 *Suas contas*\n\n` +
     accounts.map((a) => `${emoji[a.kind]} *${a.name}* — ${brl(a.balance)}`).join("\n") +
     `\n\n_Para lançar: "guardei 200 na ${accounts[0].name.toLowerCase()}"_`
   );
@@ -132,17 +132,17 @@ async function cmdDesfazer(userId) {
     [userId]
   );
   if (!last) return "Não há nada para desfazer.";
-  return `🗑 Apagado: *${brl(last.amount)}* — ${last.description} (${dm(last.date)})`;
+  return `🗑 Excluído: *${brl(last.amount)}* — ${last.description} (${dm(last.date)})`;
 }
 
-// ── Registo de movimento ─────────────────────────────
-async function registar(userId, text, source) {
+// ── Registro de lançamento ─────────────────────────────
+async function registrar(userId, text, source) {
   const accounts = await money.getAccounts(userId);
 
   // Notificação de banco encaminhada: o texto delas é feito para humanos, não
   // para regex ("Compra aprovada em UBER *TRIP BR"). A IA lê melhor.
   if (ai.ENABLED && ai.pareceNotificacaoBancaria(text)) {
-    return registarExtraido(userId, await ai.analisarTexto(text), source);
+    return registrarExtraido(userId, await ai.analisarTexto(text), source);
   }
 
   const parsed = parseMessage(text, accounts);
@@ -151,28 +151,28 @@ async function registar(userId, text, source) {
   if (!parsed) {
     if (ai.ENABLED) {
       const dados = await ai.analisarTexto(text);
-      if (!dados.erro && dados.encontrou) return registarExtraido(userId, dados, source);
+      if (!dados.erro && dados.encontrou) return registrarExtraido(userId, dados, source);
     }
     return (
       "❓ Não encontrei um valor nessa mensagem.\n\n" +
-      "Tenta assim: `50 mercado` ou `recebi 300 pix`.\n" +
-      "Também podes mandar a foto do comprovante, o print da notificação do banco, ou um áudio.\n" +
-      "Escreve /ajuda para ver os exemplos."
+      "Tente assim: `50 mercado` ou `recebi 300 pix`.\n" +
+      "Também pode mandar a foto do comprovante, o print da notificação do banco, ou um áudio.\n" +
+      "Escreva /ajuda para ver os exemplos."
     );
   }
 
-  // Movimento de conta sem conta identificada: mostra as opções em vez de adivinhar.
+  // Lançamento de conta sem conta identificada: mostra as opções em vez de adivinhar.
   if (parsed.needsAccount) {
     const candidatas = accounts.filter((a) =>
       parsed.tipo === "rendimento" ? a.kind !== "reserva" : true
     );
     if (!candidatas.length) {
-      return "Precisas de criar uma conta primeiro, no painel *Reserva* ou *Investimentos* da app.";
+      return "Você precisa criar uma conta primeiro, no painel *Reserva* ou *Investimentos* do app.";
     }
     return (
       `🤔 Para qual conta?\n\n` +
       candidatas.map((a) => `• ${a.name}`).join("\n") +
-      `\n\nRepete indicando a conta, por exemplo:\n\`${text} na ${candidatas[0].name.toLowerCase()}\``
+      `\n\nRepita indicando a conta, por exemplo:\n\`${text} na ${candidatas[0].name.toLowerCase()}\``
     );
   }
 
@@ -191,7 +191,7 @@ async function confirmacao(userId, row) {
   const sinal = { entrada: "+", saida: "−", aporte: "→", resgate: "←", rendimento: "+" }[row.tipo];
   const emoji = { aporte: "🐖", resgate: "↩️", rendimento: "📈" }[row.tipo] || iconFor(row.category);
 
-  let txt = `${emoji} *Registado*\n${sinal} ${brl(row.amount)} — ${row.description}\n`;
+  let txt = `${emoji} *Registrado*\n${sinal} ${brl(row.amount)} — ${row.description}\n`;
 
   if (row.account_id) {
     const acc = (await money.getAccounts(userId)).find((a) => a.id === row.account_id);
@@ -231,16 +231,16 @@ const ERROS_IA = {
   sem_ia: "🤖 A leitura automática não está configurada no servidor.",
   sem_transcricao: "🎤 A transcrição de áudio não está configurada no servidor.",
   recusado: "🤖 Não consegui processar essa imagem.",
-  falhou: "🤖 Falhou a leitura. Tenta de novo, ou escreve o valor à mão.",
-  sem_resposta: "🤖 Não percebi o que está na imagem.",
-  vazio: "🎤 Não consegui ouvir nada. Grava de novo mais perto do microfone.",
+  falhou: "🤖 Falhou a leitura. Tente de novo, ou escreva o valor à mão.",
+  sem_resposta: "🤖 Não entendi o que está na imagem.",
+  vazio: "🎤 Não consegui ouvir nada. Grave de novo mais perto do microfone.",
 };
 
-async function registarExtraido(userId, dados, source) {
+async function registrarExtraido(userId, dados, source) {
   if (dados.erro) return ERROS_IA[dados.erro] || ERROS_IA.falhou;
 
   if (!dados.encontrou || !(dados.valor > 0)) {
-    return "🤔 Não encontrei nenhum valor aí.\n\nSe for um comprovante, tenta uma foto mais nítida. Ou escreve à mão: `50 mercado`";
+    return "🤔 Não encontrei nenhum valor aí.\n\nSe for um comprovante, tente uma foto mais nítida. Ou escreva à mão: `50 mercado`";
   }
 
   const tipo = dados.tipo === "entrada" ? "entrada" : "saida";
@@ -257,18 +257,18 @@ async function registarExtraido(userId, dados, source) {
 
   // Leitura duvidosa: avisa em vez de deixar passar em silêncio.
   if (dados.confianca === "baixa") {
-    txt += `\n\n⚠️ Não tenho certeza do que li. Confere na app.`;
+    txt += `\n\n⚠️ Não tenho certeza do que li. Confira no app.`;
   }
   if (dados.observacao) txt += `\n_${dados.observacao}_`;
   if (dados.parcelas > 1) {
-    txt += `\n\n💳 Parece parcelado em ${dados.parcelas}x. Lancei o valor total — se quiseres acompanhar parcela a parcela, regista em *Planos* na app.`;
+    txt += `\n\n💳 Parece parcelado em ${dados.parcelas}x. Lancei o valor total — se quiseres acompanhar parcela a parcela, registra em *Planos* no app.`;
   }
   return txt;
 }
 
 /** Foto ou print enviado no WhatsApp. */
 async function handleImage(userId, base64, mediaType, source = "whatsapp") {
-  return registarExtraido(userId, await ai.analisarImagem(base64, mediaType), source);
+  return registrarExtraido(userId, await ai.analisarImagem(base64, mediaType), source);
 }
 
 /** Nota de voz: transcreve e trata como se tivesse sido escrita. */
@@ -310,12 +310,12 @@ async function handleMessage(userId, text, source = "whatsapp") {
     case "/contas":
       return cmdContas(userId);
     case "/desfazer":
-    case "/apagar":
+    case "/excluir":
       return cmdDesfazer(userId);
   }
 
-  // Não é comando → tentar interpretar como movimento.
-  return registar(userId, t, source);
+  // Não é comando → tenter interpretar como lançamento.
+  return registrar(userId, t, source);
 }
 
 module.exports = { handleMessage, handleImage, handleAudio, AJUDA, brl };

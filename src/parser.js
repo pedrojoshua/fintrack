@@ -1,4 +1,4 @@
-// Interpreta mensagens em português livre e devolve um movimento estruturado.
+// Interpreta mensagens em português livre e devolve um lançamento estruturado.
 // Usado tanto pelo WhatsApp como pelo Telegram.
 
 const { norm, detectOut, detectIn, detectOrigin } = require("./categories");
@@ -77,7 +77,7 @@ function extractDate(text) {
   return { date: iso(today), raw: null };
 }
 
-// ── Tipo de movimento ────────────────────────────────
+// ── Tipo de lançamento ────────────────────────────────
 const RX_RENDIMENTO = /\b(rendeu|rendimento|rendimentos|juros|dividendo|dividendos|proventos|jcp)\b/i;
 const RX_RESGATE    = /\b(resgatei|resgate|resgatar|retirei|retirada|tirei|saquei|saque)\b/i;
 const RX_APORTE     = /\b(guardei|guardar|poupei|poupar|investi|investir|apliquei|aplicar|aporte|aportei|separei)\b/i;
@@ -135,7 +135,7 @@ function matchAccount(hint, accounts) {
 const NOISE = new RegExp(
   "\\b(" +
   "entrada|saida|saída|salario|salário|recebi|recebido|recebemos|ganhei|paguei|pagar|gastei|gasto|" +
-  // "reias"/"reias" são erros de digitação comuns no telemóvel
+  // "reias"/"reias" são erros de digitação comuns no celular
   "comprei|compra|reais|reias|reai|real|rs|conta|de|do|da|dos|das|no|na|nos|nas|em|com|por|pra|para|o|a|os|as|um|uma|" +
   "guardei|guardar|poupei|investi|investir|apliquei|aporte|aportei|separei|" +
   "resgatei|resgate|retirei|tirei|saquei|rendeu|rendimento|juros|" +
@@ -156,7 +156,7 @@ function cleanDescription(text) {
 }
 
 // ── Notificações de banco encaminhadas ───────────────
-// Nubank, Inter, Itaú, PicPay, Mercado Pago e afins escrevem em frases fixas.
+// Nubank, Inter, Itaú, PicPay, Mercado Pago e afins escrevam em frases fixas.
 // Vale ler por regras: é grátis e mais previsível do que texto livre.
 
 const RX_SAIDA_BANCO = /\b(compra|pagamento|paguei|pagou|debitad[oa]|d[ée]bito|enviad[oa]|enviou|saque|transfer[êe]ncia enviada|pix enviado|fatura|cobran[çc]a)\b/i;
@@ -259,8 +259,8 @@ function parseBankNotification(text) {
 /**
  * Interpreta a mensagem.
  * @param {string} text  mensagem crua
- * @param {Array}  accounts contas do utilizador (para aportes/resgates)
- * @returns {object|null} movimento, ou null se não houver valor reconhecível
+ * @param {Array}  accounts contas do usuário (para aportes/resgates)
+ * @returns {object|null} lançamento, ou null se não houver valor reconhecível
  */
 function parseMessage(text, accounts = []) {
   const original = String(text || "").trim();
@@ -283,7 +283,7 @@ function parseMessage(text, accounts = []) {
   if (!amount) return null;
   rest = rest.replace(amount.raw, " ");
 
-  // 4. Conta, quando o movimento é de conta
+  // 4. Conta, quando o lançamento é de conta
   let account = null;
   let accountHint = null;
   if (tipo === "aporte" || tipo === "resgate" || tipo === "rendimento") {

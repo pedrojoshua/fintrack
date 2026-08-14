@@ -9,7 +9,7 @@
 //   rendimento → cresce dentro da conta, sem passar pelo mês
 //
 //   saldo livre do mês = entradas − saídas − aportes + resgates
-//   património         = soma dos saldos das contas
+//   patrimônio         = soma dos saldos das contas
 
 const db = require("./db");
 
@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS = {
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-// ── Definições ───────────────────────────────────────
+// ── Configurações ───────────────────────────────────────
 async function getSettings(userId) {
   const rows = await db.query("SELECT key, value FROM settings WHERE user_id = $1", [userId]);
   const cfg = { ...DEFAULT_SETTINGS };
@@ -43,8 +43,8 @@ async function saveSettings(userId, patch) {
 }
 
 // ── Contas com saldo derivado ────────────────────────
-// O saldo nunca é guardado: é sempre recalculado a partir dos movimentos,
-// por isso não pode ficar dessincronizado.
+// O saldo nunca é guardado: é sempre recalculado a partir dos lançamentos,
+// por isso não fica dessincronizado.
 const ACCOUNTS_SQL = `
   SELECT
     a.id, a.name, a.kind, a.institution, a.goal, a.expected_yield,
@@ -84,7 +84,7 @@ async function getAccounts(userId, { includeArchived = false } = {}) {
 }
 
 // ── Despesa média mensal ─────────────────────────────
-// Média das saídas dos últimos N meses completos com movimento.
+// Média das saídas dos últimos N meses completos com lançamento.
 // Serve de base para dimensionar a reserva de emergência.
 async function averageMonthlyExpense(userId, months) {
   const rows = await db.query(
@@ -224,7 +224,7 @@ async function getSummary(userId, month, year) {
   const budgetMap = Object.fromEntries(budgets.map((b) => [b.category, round2(b.amount)]));
 
   // O salário fixo declarado no planeamento é a referência de rendimento.
-  // O campo manual das definições fica como alternativa para quem não o usa.
+  // O campo manual das configurações fica como alternativa para quem não o usa.
   const rendaFixa = await fixedIncome(userId);
   const rendaPrevista = rendaFixa || round2(cfg.monthly_income);
 
@@ -309,7 +309,7 @@ async function getPlanned(userId, month, year) {
   };
 }
 
-// Soma das receitas fixas ativas — é o "salário fixo" do utilizador.
+// Soma das receitas fixas ativas — é o "salário fixo" do usuário.
 async function fixedIncome(userId) {
   const row = await db.one(
     `SELECT COALESCE(SUM(amount), 0) AS total FROM planned

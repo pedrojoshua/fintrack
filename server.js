@@ -1,5 +1,5 @@
 // FinTrack v5 — gestão financeira pessoal
-// Postgres + Express, registo por WhatsApp (Evolution API) e Telegram.
+// Postgres + Express, registro por WhatsApp (Evolution API) e Telegram.
 
 const express = require("express");
 const path = require("path");
@@ -36,7 +36,7 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "200kb" }));
 
 // Cabeçalhos de segurança. A app é servida da mesma origem, por isso não há CORS:
-// nenhum site externo deve poder chamar a API com o token do utilizador.
+// nenhum site externo deve poder chamar a API com o token do usuário.
 app.use((_req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -85,7 +85,7 @@ app.get("*", (req, res) => {
 app.use((err, _req, res, _next) => {
   console.error("Erro:", err.stack || err.message);
   if (res.headersSent) return;
-  res.status(500).json({ error: "Erro interno. Tenta de novo." });
+  res.status(500).json({ error: "Erro interno. Tente de novo." });
 });
 
 // ── Arranque ─────────────────────────────────────────

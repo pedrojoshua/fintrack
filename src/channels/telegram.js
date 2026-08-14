@@ -1,4 +1,4 @@
-// Canal Telegram. Ao contrário do WhatsApp (ligado ao próprio número), qualquer
+// Canal Telegram. Ao contrário do WhatsApp (conectado ao próprio número), qualquer
 // pessoa pode falar com o bot — por isso a ligação exige um código gerado na app.
 
 const db = require("../db");
@@ -41,7 +41,7 @@ const send = (chatId, text) =>
 
 // ── Ligação por código ───────────────────────────────
 async function tryLink(chatId, text) {
-  const m = text.match(/^\/?(?:vincular|ligar|start)\s+(\d{6})$/i);
+  const m = text.match(/^\/?(?:vincular|conectar|start)\s+(\d{6})$/i);
   if (!m) return false;
 
   const code = m[1];
@@ -50,13 +50,13 @@ async function tryLink(chatId, text) {
     [code]
   );
   if (!row || Number(row.value.exp) < Date.now()) {
-    await send(chatId, "❌ Código inválido ou expirado. Gera outro em Definições → Telegram.");
+    await send(chatId, "❌ Código inválido ou expirado. Gera outro em Configurações → Telegram.");
     return true;
   }
 
   await db.query("UPDATE users SET telegram_chat_id = $1 WHERE id = $2", [String(chatId), row.user_id]);
   await db.query("DELETE FROM settings WHERE user_id = $1 AND key = 'link_code'", [row.user_id]);
-  await send(chatId, "✅ *Ligado!* Já podes registar gastos por aqui.\n\nEscreve /ajuda para ver como.");
+  await send(chatId, "✅ *Conectado!* Já podes registrar gastos por aqui.\n\nEscreva /ajuda para ver como.");
   return true;
 }
 
@@ -72,7 +72,7 @@ async function handleUpdate(update) {
   if (!user) {
     await send(
       chatId,
-      "👋 Este bot é privado.\n\nAbre o FinTrack → *Definições* → *Telegram*, gera o código e envia-o aqui:\n`/vincular 123456`"
+      "👋 Este bot é privado.\n\nAbra o FinTrack → *Configurações* → *Telegram*, gera o código e envia-o aqui:\n`/vincular 123456`"
     );
     return;
   }
@@ -82,7 +82,7 @@ async function handleUpdate(update) {
     if (reply) await send(chatId, reply);
   } catch (err) {
     console.error("Telegram handler:", err.message);
-    await send(chatId, "⚠️ Deu erro ao registar. Tenta de novo daqui a pouco.");
+    await send(chatId, "⚠️ Deu erro ao registrar. Tente de novo daqui a pouco.");
   }
 }
 

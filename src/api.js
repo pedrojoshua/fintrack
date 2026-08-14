@@ -41,11 +41,11 @@ router.get("/auth/state", wrap(async (_req, res) => {
 
 router.post("/auth/setup", wrap(async (req, res) => {
   const existing = await db.one("SELECT COUNT(*)::int AS n FROM users");
-  if (existing.n > 0) return res.status(409).json({ error: "Já existe uma conta. Faz login." });
+  if (existing.n > 0) return res.status(409).json({ error: "Já existe uma conta. Faça login." });
 
   const username = clean(req.body.username, 40);
   const password = String(req.body.password || "");
-  if (username.length < 3) return res.status(400).json({ error: "Utilizador com pelo menos 3 caracteres." });
+  if (username.length < 3) return res.status(400).json({ error: "Usuário com pelo menos 3 caracteres." });
   if (password.length < 8) return res.status(400).json({ error: "Senha com pelo menos 8 caracteres." });
 
   const hash = await auth.hashPassword(password);
@@ -54,7 +54,7 @@ router.post("/auth/setup", wrap(async (req, res) => {
     [username, hash]
   );
 
-  // Conta de reserva por omissão — o painel nasce útil em vez de vazio.
+  // Conta de reserva por padrão — o painel nasce útil em vez de vazio.
   await db.query(
     `INSERT INTO accounts (user_id, name, kind, institution) VALUES ($1, 'Reserva de Emergência', 'reserva', '')`,
     [user.id]
@@ -68,8 +68,8 @@ router.post("/auth/login", wrap(async (req, res) => {
   const password = String(req.body.password || "");
 
   const user = await db.one("SELECT id, username, password_hash FROM users WHERE username = $1", [username]);
-  // Mensagem igual nos dois casos — não revela se o utilizador existe.
-  const fail = () => res.status(401).json({ error: "Utilizador ou senha incorretos." });
+  // Mensagem igual nos dois casos — não revela se o usuário existe.
+  const fail = () => res.status(401).json({ error: "Usuário ou senha incorretos." });
   if (!user) {
     await auth.checkPassword(password, "$2a$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin");
     return fail();
@@ -111,7 +111,7 @@ router.use(auth.requireAuth);
 
 router.get("/categories", (_req, res) => res.json({ out: cats.OUT, in: cats.IN, origins: cats.ORIGINS }));
 
-// ── Movimentos ───────────────────────────────────────
+// ── Lançamentos ───────────────────────────────────────
 router.get("/transactions", wrap(async (req, res) => {
   const { month, year, tipo, category, q, limit } = req.query;
   const where = ["t.user_id = $1"];
@@ -161,7 +161,7 @@ router.post("/transactions", wrap(async (req, res) => {
   let accountId = null;
   if (ACCOUNT_TIPOS.includes(tipo)) {
     accountId = Number(b.account_id);
-    if (!accountId) return res.status(400).json({ error: "Escolhe a conta para este movimento." });
+    if (!accountId) return res.status(400).json({ error: "Escolha a conta para este lançamento." });
     const acc = await db.one("SELECT id FROM accounts WHERE id = $1 AND user_id = $2", [accountId, req.user.id]);
     if (!acc) return res.status(404).json({ error: "Conta não encontrada." });
   }
@@ -183,7 +183,7 @@ router.patch("/transactions/:id", wrap(async (req, res) => {
     "SELECT id, tipo, category, account_id FROM transactions WHERE id = $1 AND user_id = $2",
     [id, req.user.id]
   );
-  if (!owned) return res.status(404).json({ error: "Movimento não encontrado." });
+  if (!owned) return res.status(404).json({ error: "Lançamento não encontrado." });
 
   const sets = [];
   const params = [];
@@ -204,7 +204,7 @@ router.patch("/transactions/:id", wrap(async (req, res) => {
   if (b.origin !== undefined) push("origin", clean(b.origin, 30));
 
   // Corrigir o tipo é o caso mais comum: o parser leu uma entrada como saída.
-  // Trocar de/para movimento de conta arrasta a conta e a categoria juntas.
+  // Trocar de/para lançamento de conta arrasta a conta e a categoria juntas.
   const novoTipo = b.tipo !== undefined ? b.tipo : owned.tipo;
   if (b.tipo !== undefined && !TIPOS.includes(b.tipo)) {
     return res.status(400).json({ error: "Tipo inválido." });
@@ -212,12 +212,12 @@ router.patch("/transactions/:id", wrap(async (req, res) => {
 
   if (ACCOUNT_TIPOS.includes(novoTipo)) {
     const accountId = Number(b.account_id ?? owned.account_id);
-    if (!accountId) return res.status(400).json({ error: "Escolhe a conta para este movimento." });
+    if (!accountId) return res.status(400).json({ error: "Escolha a conta para este lançamento." });
     const acc = await db.one("SELECT id FROM accounts WHERE id = $1 AND user_id = $2", [accountId, req.user.id]);
     if (!acc) return res.status(404).json({ error: "Conta não encontrada." });
 
     if (accountId !== owned.account_id) push("account_id", accountId);
-    // Movimentos de conta não têm categoria de gasto — a categoria é o próprio tipo.
+    // Lançamentos de conta não têm categoria de gasto — a categoria é o próprio tipo.
     if (novoTipo !== owned.category) push("category", novoTipo);
   } else {
     // Virou entrada/saída: larga a conta e passa a ter categoria normal.
@@ -244,7 +244,7 @@ router.delete("/transactions/:id", wrap(async (req, res) => {
     "DELETE FROM transactions WHERE id = $1 AND user_id = $2 RETURNING id",
     [Number(req.params.id), req.user.id]
   );
-  if (!row) return res.status(404).json({ error: "Movimento não encontrado." });
+  if (!row) return res.status(404).json({ error: "Lançamento não encontrado." });
   res.json({ ok: true });
 }));
 
@@ -256,7 +256,7 @@ router.get("/accounts", wrap(async (req, res) => {
 router.post("/accounts", wrap(async (req, res) => {
   const b = req.body || {};
   const name = clean(b.name, 60);
-  if (!name) return res.status(400).json({ error: "Dá um nome à conta." });
+  if (!name) return res.status(400).json({ error: "Dê um nome à conta." });
   if (!KINDS.includes(b.kind)) return res.status(400).json({ error: "Tipo de conta inválido." });
 
   const row = await db.one(
@@ -299,7 +299,7 @@ router.patch("/accounts/:id", wrap(async (req, res) => {
   res.json(row);
 }));
 
-// Apagar uma conta leva os seus movimentos (ON DELETE CASCADE) — avisar no cliente.
+// Excluir uma conta leva os seus lançamentos (ON DELETE CASCADE) — avisar no cliente.
 router.delete("/accounts/:id", wrap(async (req, res) => {
   const row = await db.one(
     "DELETE FROM accounts WHERE id = $1 AND user_id = $2 RETURNING id",
@@ -338,7 +338,7 @@ router.post("/planned", wrap(async (req, res) => {
   if (!MODOS.includes(b.modo)) return res.status(400).json({ error: "Modo inválido." });
 
   const name = clean(b.name, 80);
-  if (!name) return res.status(400).json({ error: "Dá um nome ao lançamento." });
+  if (!name) return res.status(400).json({ error: "Dê um nome ao lançamento." });
 
   const total = parseAmount(b.amount);
   if (total === null) return res.status(400).json({ error: "Valor tem de ser maior que zero." });
@@ -439,7 +439,7 @@ router.delete("/planned/:id", wrap(async (req, res) => {
   res.json({ ok: true, removidos: 1 });
 }));
 
-// Transforma um lançamento previsto num movimento real já acontecido.
+// Transforma um lançamento previsto num lançamento real já acontecido.
 router.post("/planned/:id/confirmar", wrap(async (req, res) => {
   const id = Number(req.params.id);
   const p = await db.one("SELECT * FROM planned WHERE id = $1 AND user_id = $2", [id, req.user.id]);
@@ -448,7 +448,7 @@ router.post("/planned/:id/confirmar", wrap(async (req, res) => {
   const date = parseDate(req.body?.date) || new Date().toISOString().slice(0, 10);
   const tx = await db.one(
     `INSERT INTO transactions (user_id, date, tipo, amount, category, description, origin, source)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,'planeamento') RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,'planejamento') RETURNING *`,
     [req.user.id, date, p.tipo, p.amount, p.category, p.name,
      p.modo === "cartao" ? "crédito" : "outro"]
   );
@@ -458,7 +458,7 @@ router.post("/planned/:id/confirmar", wrap(async (req, res) => {
   res.status(201).json(tx);
 }));
 
-// ── Definições e orçamentos ──────────────────────────
+// ── Configurações e orçamentos ──────────────────────────
 router.get("/settings", wrap(async (req, res) => res.json(await money.getSettings(req.user.id))));
 router.post("/settings", wrap(async (req, res) => res.json(await money.saveSettings(req.user.id, req.body || {}))));
 
@@ -492,7 +492,7 @@ router.get("/channels", wrap(async (req, res) => {
   res.json({
     whatsapp: {
       enabled: whatsapp.ENABLED,
-      state,                          // open = ligado ao telemóvel
+      state,                          // open = conectado ao celular
       linked: !!u.whatsapp_jid,
       number: u.whatsapp_jid || null,
       instance: whatsapp.INSTANCE,
@@ -504,14 +504,14 @@ router.get("/channels", wrap(async (req, res) => {
   });
 }));
 
-// QR para ligar o WhatsApp. Só faz sentido quando o estado não é "open".
+// QR para conectar o WhatsApp. Só faz sentido quando o estado não é "open".
 router.post("/channels/whatsapp/connect", wrap(async (_req, res) => {
   if (!whatsapp.ENABLED) return res.status(503).json({ error: "WhatsApp não configurado no servidor." });
   const state = await whatsapp.connectionState();
-  if (state === "open") return res.json({ state, qr: null, message: "Já está ligado." });
+  if (state === "open") return res.json({ state, qr: null, message: "Já está conectado." });
 
   const qr = await whatsapp.getQrCode();
-  if (!qr) return res.status(502).json({ error: "Não consegui obter o QR. Tenta outra vez." });
+  if (!qr) return res.status(502).json({ error: "Não consegui obter o QR. Tente outra vez." });
   res.json({ state, qr });
 }));
 
@@ -521,7 +521,7 @@ router.post("/channels/whatsapp/logout", wrap(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// Código de 6 dígitos, válido 10 minutos, para ligar o Telegram.
+// Código de 6 dígitos, válido 10 minutos, para conectar o Telegram.
 router.post("/channels/telegram/code", wrap(async (req, res) => {
   const code = String(Math.floor(100000 + Math.random() * 900000));
   const value = { code, exp: Date.now() + 10 * 60 * 1000 };

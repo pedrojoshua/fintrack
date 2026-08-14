@@ -52,7 +52,7 @@ const INSTRUCOES = `Extrais lançamentos financeiros de comprovantes, notificaç
 Regras:
 - O valor é sempre positivo. O campo "tipo" diz se é entrada ou saída.
 - Compra, pagamento, débito, fatura, saque → saida. Pix recebido, depósito, salário, estorno, cashback → entrada.
-- "descricao" é o nome do estabelecimento como uma pessoa o escreveria: "Uber", "Padaria do Zé", "Mercado Livre". Limpa códigos de operadora ("UBER *TRIP BR" → "Uber", "PAG*JOAOSILVA" → "João Silva").
+- "descricao" é o nome do estabelecimento como uma pessoa escreveria: "Uber", "Padaria do Zé", "Mercado Livre". Limpa códigos de operadora ("UBER *TRIP BR" → "Uber", "PAG*JOAOSILVA" → "João Silva").
 - "categoria" tem de ser exatamente um dos valores permitidos. Na dúvida usa "outros".
 - Se a imagem tiver total e subtotal, usa o TOTAL pago.
 - Se não houver data visível, usa hoje: ${hoje()}.
