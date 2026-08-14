@@ -6,7 +6,7 @@
 // próprio número da instância — ninguém de fora consegue lançar nada.
 
 const db = require("../db");
-const { handleMessage } = require("./handler");
+const { handleMessage, handleImage, handleAudio } = require("./handler");
 
 const URL = (process.env.EVOLUTION_URL || "").replace(/\/$/, "");
 const KEY = process.env.EVOLUTION_KEY || "";
@@ -133,15 +133,40 @@ async function ownerNumber({ fresh = false } = {}) {
 }
 
 // ── Receção ──────────────────────────────────────────
+// Mensagens efémeras embrulham o conteúdo real numa camada extra.
+const unwrap = (m) => m?.ephemeralMessage?.message || m?.viewOnceMessageV2?.message || m || {};
+
 function extractText(msg) {
-  const m = msg?.message;
+  const m = unwrap(msg?.message);
   return (
     m?.conversation ||
     m?.extendedTextMessage?.text ||
-    m?.ephemeralMessage?.message?.conversation ||
-    m?.ephemeralMessage?.message?.extendedTextMessage?.text ||
+    m?.imageMessage?.caption ||
+    m?.documentMessage?.caption ||
     ""
   ).trim();
+}
+
+// Que tipo de média veio, se veio alguma.
+function extractMedia(msg) {
+  const m = unwrap(msg?.message);
+  if (m.imageMessage) return { kind: "image", mimetype: m.imageMessage.mimetype || "image/jpeg" };
+  if (m.audioMessage) return { kind: "audio", mimetype: m.audioMessage.mimetype || "audio/ogg" };
+  // PDF de comprovante não dá para ler como imagem; só aceitamos documentos-imagem.
+  if (m.documentMessage?.mimetype?.startsWith("image/")) {
+    return { kind: "image", mimetype: m.documentMessage.mimetype };
+  }
+  return null;
+}
+
+// O webhook não traz o ficheiro — pede-se à Evolution pelo id da mensagem.
+async function downloadMedia(messageKey) {
+  const r = await evo(`/chat/getBase64FromMediaMessage/${INSTANCE}`, {
+    method: "POST",
+    body: { message: { key: messageKey }, convertToMp4: false },
+  });
+  if (!r.ok || !r.data?.base64) return null;
+  return { base64: r.data.base64, mimetype: r.data.mimetype || null };
 }
 
 // Evita processar duas vezes a mesma mensagem quando a Evolution repete o webhook.
@@ -171,7 +196,8 @@ async function handleWebhook(payload) {
     if (alreadySeen(id)) continue;
 
     const text = extractText(msg);
-    if (!text) continue;
+    const media = extractMedia(msg);
+    if (!text && !media) continue;
 
     const from = jidNumber(remoteJid);
     // Conversa consigo mesmo: o destinatário é o próprio número da instância.
@@ -189,7 +215,25 @@ async function handleWebhook(payload) {
     if (!user) continue;
 
     try {
-      const reply = await handleMessage(user.id, text, "whatsapp");
+      let reply;
+
+      if (media) {
+        // Ler imagem ou transcrever áudio demora alguns segundos — avisa,
+        // senão parece que a mensagem se perdeu.
+        await sendText(from, media.kind === "image" ? "📷 A ler…" : "🎤 A ouvir…");
+
+        const file = await downloadMedia(msg.key);
+        if (!file) {
+          reply = "⚠️ Não consegui descarregar o ficheiro. Tenta enviar outra vez.";
+        } else if (media.kind === "image") {
+          reply = await handleImage(user.id, file.base64, file.mimetype || media.mimetype, "whatsapp");
+        } else {
+          reply = await handleAudio(user.id, file.base64, file.mimetype || media.mimetype, "whatsapp");
+        }
+      } else {
+        reply = await handleMessage(user.id, text, "whatsapp");
+      }
+
       if (reply) await sendText(from, reply);
     } catch (err) {
       console.error("WhatsApp handler:", err.message);

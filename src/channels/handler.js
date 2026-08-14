@@ -3,6 +3,7 @@
 
 const db = require("../db");
 const money = require("../money");
+const ai = require("../ai");
 const { parseMessage } = require("../parser");
 const { iconFor } = require("../categories");
 
@@ -16,7 +17,11 @@ const dm = (iso) => {
 
 const AJUDA =
   "💰 *FinTrack*\n\n" +
-  "Escreve o que gastaste, sem formato fixo:\n" +
+  "*Sem digitar nada*\n" +
+  "📷 Manda a foto do cupom ou o print da notificação do banco\n" +
+  "↪️ Encaminha a mensagem que o banco te enviou\n" +
+  "🎤 Manda um áudio: \"gastei cinquenta no mercado\"\n\n" +
+  "*Escrevendo* (sem formato fixo)\n" +
   "• `50 mercado`\n" +
   "• `paguei 89,90 netflix`\n" +
   "• `ontem 45 uber`\n" +
@@ -133,12 +138,25 @@ async function cmdDesfazer(userId) {
 // ── Registo de movimento ─────────────────────────────
 async function registar(userId, text, source) {
   const accounts = await money.getAccounts(userId);
+
+  // Notificação de banco encaminhada: o texto delas é feito para humanos, não
+  // para regex ("Compra aprovada em UBER *TRIP BR"). A IA lê melhor.
+  if (ai.ENABLED && ai.pareceNotificacaoBancaria(text)) {
+    return registarExtraido(userId, await ai.analisarTexto(text), source);
+  }
+
   const parsed = parseMessage(text, accounts);
 
+  // O parser de regras não entendeu — última tentativa com a IA.
   if (!parsed) {
+    if (ai.ENABLED) {
+      const dados = await ai.analisarTexto(text);
+      if (!dados.erro && dados.encontrou) return registarExtraido(userId, dados, source);
+    }
     return (
       "❓ Não encontrei um valor nessa mensagem.\n\n" +
       "Tenta assim: `50 mercado` ou `recebi 300 pix`.\n" +
+      "Também podes mandar a foto do comprovante, o print da notificação do banco, ou um áudio.\n" +
       "Escreve /ajuda para ver os exemplos."
     );
   }
@@ -208,6 +226,60 @@ async function confirmacao(userId, row) {
   return txt;
 }
 
+// ── Lançamento vindo da IA (imagem ou notificação de banco) ──
+const ERROS_IA = {
+  sem_ia: "🤖 A leitura automática não está configurada no servidor.",
+  sem_transcricao: "🎤 A transcrição de áudio não está configurada no servidor.",
+  recusado: "🤖 Não consegui processar essa imagem.",
+  falhou: "🤖 Falhou a leitura. Tenta de novo, ou escreve o valor à mão.",
+  sem_resposta: "🤖 Não percebi o que está na imagem.",
+  vazio: "🎤 Não consegui ouvir nada. Grava de novo mais perto do microfone.",
+};
+
+async function registarExtraido(userId, dados, source) {
+  if (dados.erro) return ERROS_IA[dados.erro] || ERROS_IA.falhou;
+
+  if (!dados.encontrou || !(dados.valor > 0)) {
+    return "🤔 Não encontrei nenhum valor aí.\n\nSe for um comprovante, tenta uma foto mais nítida. Ou escreve à mão: `50 mercado`";
+  }
+
+  const tipo = dados.tipo === "entrada" ? "entrada" : "saida";
+  const data = /^\d{4}-\d{2}-\d{2}$/.test(dados.data || "") ? dados.data : new Date().toISOString().slice(0, 10);
+
+  const row = await db.one(
+    `INSERT INTO transactions (user_id, date, tipo, amount, category, description, origin, source)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [userId, data, tipo, Math.round(dados.valor * 100) / 100,
+     dados.categoria || "outros", dados.descricao || "Lançamento", dados.origem || "outro", source]
+  );
+
+  let txt = await confirmacao(userId, row);
+
+  // Leitura duvidosa: avisa em vez de deixar passar em silêncio.
+  if (dados.confianca === "baixa") {
+    txt += `\n\n⚠️ Não tenho certeza do que li. Confere na app.`;
+  }
+  if (dados.observacao) txt += `\n_${dados.observacao}_`;
+  if (dados.parcelas > 1) {
+    txt += `\n\n💳 Parece parcelado em ${dados.parcelas}x. Lancei o valor total — se quiseres acompanhar parcela a parcela, regista em *Planos* na app.`;
+  }
+  return txt;
+}
+
+/** Foto ou print enviado no WhatsApp. */
+async function handleImage(userId, base64, mediaType, source = "whatsapp") {
+  return registarExtraido(userId, await ai.analisarImagem(base64, mediaType), source);
+}
+
+/** Nota de voz: transcreve e trata como se tivesse sido escrita. */
+async function handleAudio(userId, base64, mimetype, source = "whatsapp") {
+  const r = await ai.transcreverAudio(base64, mimetype);
+  if (r.erro) return ERROS_IA[r.erro] || ERROS_IA.falhou;
+
+  const resposta = await handleMessage(userId, r.texto, source);
+  return `🎤 _"${r.texto}"_\n\n${resposta}`;
+}
+
 /**
  * Trata uma mensagem recebida de qualquer canal.
  * @param {number} userId
@@ -246,4 +318,4 @@ async function handleMessage(userId, text, source = "whatsapp") {
   return registar(userId, t, source);
 }
 
-module.exports = { handleMessage, AJUDA, brl };
+module.exports = { handleMessage, handleImage, handleAudio, AJUDA, brl };

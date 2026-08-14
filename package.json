@@ -8,6 +8,7 @@
     "dev": "node server.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
     "bcryptjs": "^2.4.3",
     "express": "^4.19.2",
     "pg": "^8.12.0"
