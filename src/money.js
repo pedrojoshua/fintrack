@@ -324,10 +324,103 @@ async function fixedIncome(userId) {
   return round2(row.total);
 }
 
+// ── Patrimônio: ativos, bens e consórcios ────────────
+// Nenhum destes é lançamento do mês. São o que você *tem* (e, no consórcio,
+// também o que ainda deve). Os valores derivados nunca são guardados: saem
+// sempre dos campos informados, para não dessincronizar.
+function decorateAsset(a) {
+  const out = { ...a, quantity: Number(a.quantity) || 0 };
+
+  if (a.kind === "ativo") {
+    // Sem preço atual informado, o ativo vale o que custou — nunca inventamos
+    // cotação nem consultamos mercado.
+    const price = a.current_price != null ? Number(a.current_price) : Number(a.avg_price);
+    out.cost = round2(out.quantity * Number(a.avg_price));
+    out.value = round2(out.quantity * price);
+    out.gain = round2(out.value - out.cost);
+    out.gain_pct = out.cost > 0 ? round2((out.gain / out.cost) * 100) : 0;
+    out.priced = a.current_price != null;
+    out.debt = 0;
+  } else if (a.kind === "consorcio") {
+    const total = a.installments;
+    const paidN = a.installments_paid;
+    const parcela = Number(a.installment_amount);
+    const left = Math.max(total - paidN, 0);
+    out.paid_total = round2(paidN * parcela);
+    out.debt = round2(left * parcela);
+    out.contract_total = round2(total * parcela);
+    // Enquanto não é contemplado, o que você tem é o que já pagou.
+    out.value = out.paid_total;
+    out.installments_left = left;
+    out.progress_pct = total > 0 ? round2((paidN / total) * 100) : 0;
+    out.years_left = round2(left / 12);
+    out.payoff_date = payoffDate(a.start_date, total, paidN);
+  } else {
+    out.value = round2(Number(a.value));
+    out.debt = 0;
+  }
+  return out;
+}
+
+// Mês em que a última parcela cai, contando do início do contrato.
+function payoffDate(startDate, total, paid) {
+  const left = Math.max(total - paid, 0);
+  if (!left) return null;
+  const base = startDate ? new Date(startDate + "T00:00:00") : new Date();
+  // Com data de início conhecida, a última parcela é a de número `total`.
+  // Sem ela, contamos as que faltam a partir de hoje.
+  const months = startDate ? total - 1 : left;
+  const d = new Date(base.getFullYear(), base.getMonth() + months, 1);
+  return d.toISOString().slice(0, 7);
+}
+
+async function getAssets(userId) {
+  const rows = await db.query(
+    "SELECT * FROM assets WHERE user_id = $1 AND archived = false ORDER BY kind, created_at",
+    [userId]
+  );
+  const list = rows.map(decorateAsset);
+  const of = (k) => list.filter((a) => a.kind === k);
+  const sum = (l, f) => round2(l.reduce((s, a) => s + f(a), 0));
+
+  const ativos = of("ativo");
+  const bens = of("bem");
+  const cons = of("consorcio");
+
+  return {
+    assets: list,
+    ativos, bens, consorcios: cons,
+    ativos_value: sum(ativos, (a) => a.value),
+    ativos_cost: sum(ativos, (a) => a.cost),
+    ativos_gain: sum(ativos, (a) => a.gain),
+    bens_value: sum(bens, (a) => a.value),
+    consorcio_paid: sum(cons, (a) => a.paid_total),
+    consorcio_debt: sum(cons, (a) => a.debt),
+    consorcio_monthly: sum(cons, (a) => (a.installments_left > 0 ? Number(a.installment_amount) : 0)),
+    total_value: sum(list, (a) => a.value),
+    total_debt: sum(list, (a) => a.debt),
+  };
+}
+
+// Patrimônio líquido: contas + ativos + bens − o que ainda se deve.
+async function getNetWorth(userId) {
+  const accounts = await getAccounts(userId);
+  const assets = await getAssets(userId);
+  const accountsTotal = round2(accounts.reduce((s, a) => s + a.balance, 0));
+  return {
+    accounts_total: accountsTotal,
+    assets_total: assets.total_value,
+    debt_total: assets.total_debt,
+    net_worth: round2(accountsTotal + assets.total_value - assets.total_debt),
+    assets,
+  };
+}
+
 module.exports = {
   DEFAULT_SETTINGS, round2,
   getSettings, saveSettings,
   getAccounts, getReserve, getInvestments,
   getSummary, averageMonthlyExpense,
   getPlanned, fixedIncome,
+  getAssets, getNetWorth,
 };

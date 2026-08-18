@@ -27,6 +27,24 @@ As **contas** são de três tipos: `reserva` (emergência), `investimento`
 guardado em coluna — é sempre recalculado a partir dos movimentos, por isso
 não pode ficar dessincronizado.
 
+## Patrimônio
+
+Fora do fluxo do mês há o que você **tem**. São três tipos, todos no mesmo
+formulário — o tipo escolhido decide que campos aparecem:
+
+| Tipo | O que se informa | O que sai daí |
+|---|---|---|
+| `ativo` | ticker, quantidade, preço médio, preço de hoje | valor da posição, ganho ou perda |
+| `bem` | descrição e valor atual | entra no património |
+| `consorcio` | total de parcelas, pagas, valor da parcela, início | quanto já pagou, quanto falta, anos e mês de quitação |
+
+```
+patrimônio líquido = saldo das contas + ativos + bens − parcelas por pagar
+```
+
+O preço de hoje é sempre informado por você: o FinTrack não consulta cotação
+nem sugere o que comprar. Sem preço informado, o ativo vale o que custou.
+
 ## Registar por WhatsApp
 
 A instância da Evolution API é ligada ao **teu próprio número**. Escreves na
@@ -65,7 +83,7 @@ server.js              arranque, webhooks, ficheiros estáticos
 src/db.js              ligação ao Postgres e migrações
 src/auth.js            bcrypt + tokens HMAC
 src/api.js             rotas REST
-src/money.js           saldos, resumo, reserva, investimentos
+src/money.js           saldos, resumo, reserva, investimentos, patrimônio
 src/parser.js          interpreta mensagens em português livre
 src/categories.js      categorias e deteção automática
 src/channels/          handler partilhado + WhatsApp + Telegram

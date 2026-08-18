@@ -721,6 +721,7 @@ nav a.hide-mobile{display:none;}
         </div>
       </div>
       <div id="invest-body"></div>
+      <div id="assets-body"></div>
     </section>
 
     <!-- ── DEFINIÇÕES ── -->
@@ -941,6 +942,86 @@ nav a.hide-mobile{display:none;}
   </div>
 </div>
 
+
+<!-- ═══════ MODAL PATRIMÓNIO ═══════ -->
+<div class="backdrop" id="asset-modal" onclick="if(event.target===this)closeAssetModal()" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head">
+      <div>
+        <div class="modal-title" id="asset-modal-title">Adicionar ao patrimônio</div>
+        <div class="modal-sub" id="asset-modal-sub"></div>
+      </div>
+      <button class="icon-btn" onclick="closeAssetModal()" aria-label="Fechar"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+
+    <div class="seg seg-3">
+      <button class="tt sel" data-a="ativo" onclick="setAssetKind('ativo')"><svg class="ic"><use href="#i-chart"/></svg>Ação / FII</button>
+      <button class="tt" data-a="bem" onclick="setAssetKind('bem')"><svg class="ic"><use href="#i-wallet"/></svg>Bem</button>
+      <button class="tt" data-a="consorcio" onclick="setAssetKind('consorcio')"><svg class="ic"><use href="#i-repeat"/></svg>Consórcio</button>
+    </div>
+
+    <div class="f">
+      <label for="v-name" id="v-name-label">Nome do papel</label>
+      <input type="text" id="v-name" placeholder="Ex.: MXRF11">
+    </div>
+
+    <div id="g-ativo">
+      <div class="f-row">
+        <div class="f">
+          <label for="v-qty">Quantidade de cotas</label>
+          <input type="text" inputmode="decimal" id="v-qty" placeholder="0">
+        </div>
+        <div class="f">
+          <label for="v-avg">Preço médio pago (R$)</label>
+          <input type="text" inputmode="decimal" id="v-avg" placeholder="0,00">
+        </div>
+      </div>
+      <div class="f">
+        <label for="v-price">Preço de hoje (R$)</label>
+        <input type="text" inputmode="decimal" id="v-price" placeholder="deixe vazio se não souber">
+        <div class="f-hint">O FinTrack não busca cotação: enquanto estiver vazio, o ativo vale o que você pagou.</div>
+      </div>
+    </div>
+
+    <div id="g-bem" style="display:none">
+      <div class="f">
+        <label for="v-value">Quanto vale hoje (R$)</label>
+        <input type="text" inputmode="decimal" id="v-value" placeholder="0,00">
+        <div class="f-hint">Use a tabela FIPE ou o preço de anúncio para carro e moto.</div>
+      </div>
+    </div>
+
+    <div id="g-consorcio" style="display:none">
+      <div class="f-row">
+        <div class="f">
+          <label for="v-inst">Total de parcelas</label>
+          <input type="number" id="v-inst" min="1" max="600" step="1" placeholder="80" oninput="updateConsHint()">
+        </div>
+        <div class="f">
+          <label for="v-paid">Parcelas já pagas</label>
+          <input type="number" id="v-paid" min="0" max="600" step="1" placeholder="0" oninput="updateConsHint()">
+        </div>
+      </div>
+      <div class="f-row">
+        <div class="f">
+          <label for="v-parcela">Valor da parcela (R$)</label>
+          <input type="text" inputmode="decimal" id="v-parcela" placeholder="0,00" oninput="updateConsHint()">
+        </div>
+        <div class="f">
+          <label for="v-start">Primeira parcela</label>
+          <input type="date" id="v-start">
+        </div>
+      </div>
+      <div class="f-hint" id="v-cons-hint"></div>
+    </div>
+
+    <div class="mactions">
+      <button class="btn btn-primary" id="v-save" onclick="submitAsset()">Adicionar</button>
+      <button class="btn btn-secondary" onclick="closeAssetModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════ MODAL WHATSAPP ═══════ -->
 <div class="backdrop" id="qr-modal" onclick="if(event.target===this)closeQr()" role="dialog" aria-modal="true">
   <div class="modal">
@@ -1004,7 +1085,7 @@ let planM = hoje.getMonth() + 2, planY = hoje.getFullYear();
 if (planM > 12) { planM = 1; planY++; }
 
 let txFilter = "all", histFilter = "all";
-let D = { summary: null, accounts: [], transactions: [], reserve: null, investments: null, all: [], plan: null };
+let D = { summary: null, accounts: [], transactions: [], reserve: null, investments: null, all: [], plan: null, networth: null };
 
 async function api(path, { method = "GET", body } = {}) {
   const res = await fetch(API + path, {
@@ -1186,7 +1267,7 @@ function showPanel(name, el) {
   if (name === "lançamentos") loadHist();
   if (name === "planejamento") loadPlan();
   if (name === "reserva") loadReserve();
-  if (name === "investimentos") loadInvest();
+  if (name === "investimentos") { loadInvest(); loadAssets(); }
   if (name === "settings") loadSettings();
 }
 const showPanelByName = (n) => showPanel(n, null);
@@ -1492,12 +1573,12 @@ async function delTx(id) {
 
 // Recarrega o que estiver visível, para os saldos não ficarem para trás.
 async function reloadAll() {
-  D.reserve = null; D.investments = null;
+  D.reserve = null; D.investments = null; D.networth = null;
   await refresh();
   const active = document.querySelector(".panel-section.active")?.id;
   if (active === "p-lançamentos") loadHist();
   if (active === "p-reserva") loadReserve();
-  if (active === "p-investimentos") loadInvest();
+  if (active === "p-investimentos") { loadInvest(); loadAssets(); }
   if (active === "p-planejamento") loadPlan();
 }
 
@@ -1901,6 +1982,255 @@ async function deleteAcc(id, name) {
   if (!confirm(`Excluir a conta "${name}"?\n\nTodos os aportes, resgates e rendimentos dela também são excluídos. Isto não se desfaz.`)) return;
   try { await api("/accounts/" + id, { method: "DELETE" }); await reloadAll(); toast("Conta excluída."); }
   catch (e) { toast(e.message, "error"); }
+}
+
+/* ══════════════════════════════════════════════════════
+   PATRIMÔNIO — ações/FII, bens e consórcios
+   Nada aqui é lançamento do mês: é o que você tem (e, no
+   consórcio, o que ainda deve). Os valores derivados vêm
+   sempre do servidor, nunca são recalculados aqui.
+══════════════════════════════════════════════════════ */
+async function loadAssets() {
+  const box = document.getElementById("assets-body");
+  if (!box) return;
+  try {
+    const nw = await api("/networth");
+    D.networth = nw;
+    const a = nw.assets;
+
+    const head = `
+      <div class="topbar" style="margin-top:26px">
+        <div class="topbar-left">
+          <h1 style="font-size:19px">Patrimônio</h1>
+          <p>Ações, bens e consórcios — o que você tem fora do mês</p>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-secondary btn-sm" onclick="openAssetModal()">${icon("plus", "ic ic-sm")} Adicionar</button>
+        </div>
+      </div>`;
+
+    if (!a.assets.length) {
+      box.innerHTML = head + `<div class="panel">${emptyBox("wallet",
+        "Nenhum bem ou ativo registrado.",
+        "Registre suas ações e fundos imobiliários, quanto valem o carro e a moto, e o consórcio com as parcelas que faltam. Tudo num formulário só.",
+        `<div style="margin-top:15px"><button class="btn btn-primary" onclick="openAssetModal()">Adicionar item</button></div>`)}</div>`;
+      return;
+    }
+
+    const gc = a.ativos_gain > 0 ? "pos" : a.ativos_gain < 0 ? "neg" : "";
+    const papeis = `${a.ativos.length} ${plural(a.ativos.length, "papel", "papéis")} · <span class="${gc}">${fmtR(a.ativos_gain)}</span>`;
+    const grupo = (titulo, lista) => lista.length
+      ? `<div class="panel-title" style="margin-bottom:11px">${titulo}</div>
+         <div class="acc-grid" style="margin-bottom:22px">${lista.map(assetCard).join("")}</div>`
+      : "";
+
+    box.innerHTML = head + `
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">Patrimônio líquido</div>
+          <div class="metric-value num">${fmtR(nw.net_worth)}</div>
+          <div class="metric-sub">contas + bens − o que ainda deve</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Ações e FIIs</div>
+          <div class="metric-value num">${fmtR(a.ativos_value)}</div>
+          <div class="metric-sub">${a.ativos.length ? papeis : "nenhum registrado"}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Bens</div>
+          <div class="metric-value num">${fmtR(a.bens_value)}</div>
+          <div class="metric-sub">${a.bens.length} ${plural(a.bens.length, "item", "itens")}</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">Consórcio a pagar</div>
+          <div class="metric-value num">${fmtR(a.consorcio_debt)}</div>
+          <div class="metric-sub">${a.consorcio_monthly > 0 ? fmtRs(a.consorcio_monthly) + " por mês" : "nada em aberto"}</div>
+        </div>
+      </div>
+      ${grupo("Ações e fundos imobiliários", a.ativos)}
+      ${grupo("Bens", a.bens)}
+      ${grupo("Consórcios", a.consorcios)}`;
+  } catch (e) { box.innerHTML = `<div class="panel">${emptyBox("alert", esc(e.message))}</div>`; }
+}
+
+function assetCard(a) {
+  const nome = esc(a.name).replace(/'/g, "\\'");
+  const del = `<button class="icon-btn danger" onclick="deleteAsset(${a.id},'${nome}')" aria-label="Excluir">${icon("trash", "ic ic-sm")}</button>`;
+  const head = (sub) => `<div class="acc-head">
+      <div style="min-width:0">
+        <div class="acc-name">${esc(a.name)}</div>
+        <div class="acc-inst">${sub}</div>
+      </div>${del}
+    </div>`;
+
+  if (a.kind === "ativo") {
+    const gc = a.gain > 0 ? "pos" : a.gain < 0 ? "neg" : "";
+    return `<div class="acc">
+      ${head(esc(a.ticker || "ação / FII"))}
+      <div class="acc-bal num">${fmtR(a.value)}</div>
+      <div class="acc-meta">
+        <span>${nf(a.quantity, a.quantity % 1 ? 2 : 0)} ${plural(a.quantity, "cota", "cotas")} × <b>${fmtRs(a.avg_price)}</b></span>
+        <span>Custou <b>${fmtRs(a.cost)}</b></span>
+        ${a.priced
+          ? `<span>${a.gain >= 0 ? "Ganho" : "Perda"} <b class="${gc}">${fmtRs(a.gain)}</b> (${fmtPct(a.gain_pct)})</span>`
+          : `<span class="acc-inst">sem preço de hoje</span>`}
+      </div>
+      <div class="acc-actions">
+        <button class="btn btn-secondary btn-sm" onclick="openAssetModal(${a.id})">Editar</button>
+      </div>
+    </div>`;
+  }
+
+  if (a.kind === "consorcio") {
+    const done = a.installments_left === 0;
+    return `<div class="acc">
+      ${head(`${a.installments_paid} de ${a.installments} parcelas`)}
+      <div class="acc-bal num">${fmtR(a.paid_total)}</div>
+      <div>
+        <div class="hero-bar" style="height:4px;margin-bottom:6px"><div class="hero-fill ${done ? "good" : ""}" style="width:${a.progress_pct}%"></div></div>
+        <div class="hero-legend"><span>${fmtPct(a.progress_pct)} pago</span><span>${done ? "✓ quitado" : "falta " + fmtRs(a.debt)}</span></div>
+      </div>
+      <div class="acc-meta">
+        <span>Parcela <b>${fmtRs(a.installment_amount)}</b></span>
+        ${done ? "" : `<span>Faltam <b>${a.installments_left}</b> (${nf(a.years_left, 1)} ${plural(a.years_left, "ano", "anos")})</span>`}
+        ${a.payoff_date ? `<span>Quita em <b>${mesAnoISO(a.payoff_date)}</b></span>` : ""}
+        <span>Contrato <b>${fmtRs(a.contract_total)}</b></span>
+      </div>
+      <div class="acc-actions">
+        ${done ? "" : `<button class="btn btn-primary btn-sm" onclick="payParcela(${a.id})">Paguei uma parcela</button>`}
+        <button class="btn btn-secondary btn-sm" onclick="openAssetModal(${a.id})">Editar</button>
+      </div>
+    </div>`;
+  }
+
+  return `<div class="acc">
+    ${head(esc(a.note || "bem"))}
+    <div class="acc-bal num">${fmtR(a.value)}</div>
+    <div class="acc-meta"><span class="acc-inst">valor informado por você</span></div>
+    <div class="acc-actions">
+      <button class="btn btn-secondary btn-sm" onclick="openAssetModal(${a.id})">Atualizar valor</button>
+    </div>
+  </div>`;
+}
+
+// "YYYY-MM" → "ago 2029", usando o formatador que a app já tem.
+const mesAnoISO = (ym) => { const [y, m] = String(ym).split("-"); return mesAno(Number(m), Number(y)); };
+
+let assetKind = "ativo", editingAssetId = null;
+
+// Um formulário só: o tipo escolhido decide que campos aparecem.
+function setAssetKind(kind) {
+  assetKind = kind;
+  document.querySelectorAll("[data-a]").forEach((b) => b.classList.toggle("sel", b.dataset.a === kind));
+  for (const k of ["ativo", "bem", "consorcio"]) {
+    document.getElementById("g-" + k).style.display = k === kind ? "block" : "none";
+  }
+  document.getElementById("asset-modal-sub").textContent = {
+    ativo: "Uma ação ou fundo imobiliário que você já comprou.",
+    bem: "Carro, moto, imóvel — algo que vale dinheiro e é seu.",
+    consorcio: "A carta de crédito e as parcelas que ainda faltam pagar.",
+  }[kind];
+  document.getElementById("v-name-label").textContent =
+    { ativo: "Nome do papel", bem: "O que é", consorcio: "Do que é o consórcio" }[kind];
+  document.getElementById("v-name").placeholder =
+    { ativo: "Ex.: MXRF11", bem: "Ex.: Moto Honda CB 500", consorcio: "Ex.: Consórcio do carro" }[kind];
+  updateConsHint();
+}
+
+// Prévia do consórcio enquanto se escreve — o usuário vê o que assinou
+// antes de guardar.
+function updateConsHint() {
+  const hint = document.getElementById("v-cons-hint");
+  if (!hint || assetKind !== "consorcio") return;
+  const total = Number(document.getElementById("v-inst").value) || 0;
+  const pagas = Number(document.getElementById("v-paid").value) || 0;
+  const parcela = parseMoney(document.getElementById("v-parcela").value) || 0;
+  if (!total || !parcela) { hint.textContent = ""; return; }
+  const faltam = Math.max(total - pagas, 0);
+  const anos = faltam / 12;
+  hint.innerHTML = `Faltam <b>${faltam}</b> ${plural(faltam, "parcela", "parcelas")} — ${nf(anos, 1)} ${plural(anos, "ano", "anos")}, R$ ${fmtRs(faltam * parcela)}. Contrato de R$ ${fmtRs(total * parcela)}.`;
+}
+
+function openAssetModal(id = null) {
+  editingAssetId = id;
+  ["v-name", "v-qty", "v-avg", "v-price", "v-value", "v-inst", "v-paid", "v-parcela", "v-start"]
+    .forEach((i) => (document.getElementById(i).value = ""));
+
+  const item = id && D.networth ? D.networth.assets.assets.find((a) => a.id === id) : null;
+  setAssetKind(item ? item.kind : "ativo");
+
+  if (item) {
+    document.getElementById("v-name").value = item.name;
+    if (item.kind === "ativo") {
+      document.getElementById("v-qty").value = nf(item.quantity, item.quantity % 1 ? 2 : 0);
+      document.getElementById("v-avg").value = nf(item.avg_price);
+      if (item.current_price != null) document.getElementById("v-price").value = nf(item.current_price);
+    } else if (item.kind === "bem") {
+      document.getElementById("v-value").value = nf(item.value);
+    } else {
+      document.getElementById("v-inst").value = item.installments;
+      document.getElementById("v-paid").value = item.installments_paid;
+      document.getElementById("v-parcela").value = nf(item.installment_amount);
+      if (item.start_date) document.getElementById("v-start").value = item.start_date;
+      updateConsHint();
+    }
+  }
+
+  document.getElementById("asset-modal-title").textContent = item ? "Editar item" : "Adicionar ao patrimônio";
+  document.getElementById("v-save").textContent = item ? "Salvar" : "Adicionar";
+  document.getElementById("asset-modal").classList.add("open");
+  setTimeout(() => document.getElementById("v-name").focus(), 120);
+}
+
+const closeAssetModal = () => document.getElementById("asset-modal").classList.remove("open");
+
+async function submitAsset() {
+  const btn = document.getElementById("v-save");
+  const val = (id) => document.getElementById(id).value.trim();
+  const name = val("v-name");
+  if (!name) return toast("Dê um nome a este item.", "error");
+
+  const body = { kind: assetKind, name };
+  if (assetKind === "ativo") {
+    body.quantity = parseMoney(val("v-qty")) || 0;
+    body.avg_price = parseMoney(val("v-avg")) || 0;
+    body.current_price = val("v-price") ? parseMoney(val("v-price")) : null;
+  } else if (assetKind === "bem") {
+    body.value = parseMoney(val("v-value")) || 0;
+  } else {
+    body.installments = Number(val("v-inst")) || 0;
+    body.installments_paid = Number(val("v-paid")) || 0;
+    body.installment_amount = parseMoney(val("v-parcela")) || 0;
+    body.start_date = val("v-start") || null;
+  }
+
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "A guardar…";
+  try {
+    if (editingAssetId) await api("/assets/" + editingAssetId, { method: "PATCH", body });
+    else await api("/assets", { method: "POST", body });
+    closeAssetModal();
+    await loadAssets();
+    toast(editingAssetId ? "Item atualizado." : "Item adicionado ao patrimônio.");
+  } catch (e) { toast(e.message, "error"); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+
+async function payParcela(id) {
+  try {
+    await api("/assets/" + id + "/parcela", { method: "POST" });
+    await loadAssets();
+    toast("Parcela registrada.");
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function deleteAsset(id, name) {
+  if (!confirm(`Remover "${name}" do patrimônio?`)) return;
+  try {
+    await api("/assets/" + id, { method: "DELETE" });
+    await loadAssets();
+    toast("Item removido.");
+  } catch (e) { toast(e.message, "error"); }
 }
 
 /* ══════════════════════════════════════════════════════

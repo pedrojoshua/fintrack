@@ -134,6 +134,37 @@ CREATE TABLE IF NOT EXISTS planned (
   )
 );
 
+-- Patrimônio: o que vale dinheiro mas não é lançamento do mês.
+--   ativo     → ação ou fundo imobiliário (quantidade × preço)
+--   bem       → carro, moto, imóvel (valor de mercado informado)
+--   consorcio → carta de crédito paga em parcelas (é bem e dívida ao mesmo tempo)
+CREATE TABLE IF NOT EXISTS assets (
+  id                 SERIAL PRIMARY KEY,
+  user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind               TEXT NOT NULL CHECK (kind IN ('ativo','bem','consorcio')),
+  name               TEXT NOT NULL,
+  -- ativo
+  ticker             TEXT NOT NULL DEFAULT '',
+  quantity           NUMERIC(16,6) NOT NULL DEFAULT 0,
+  avg_price          NUMERIC(14,2) NOT NULL DEFAULT 0,
+  current_price      NUMERIC(14,2),
+  -- bem
+  value              NUMERIC(14,2) NOT NULL DEFAULT 0,
+  -- consórcio
+  installments       INTEGER NOT NULL DEFAULT 0,
+  installments_paid  INTEGER NOT NULL DEFAULT 0,
+  installment_amount NUMERIC(14,2) NOT NULL DEFAULT 0,
+  start_date         DATE,
+  note               TEXT NOT NULL DEFAULT '',
+  archived           BOOLEAN NOT NULL DEFAULT false,
+  updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- um consórcio não pode ter mais parcelas pagas do que contratadas
+  CONSTRAINT assets_paid_shape CHECK (installments_paid BETWEEN 0 AND GREATEST(installments, 0))
+);
+
+CREATE INDEX IF NOT EXISTS assets_user_idx ON assets (user_id, kind) WHERE archived = false;
+
 CREATE INDEX IF NOT EXISTS planned_user_idx  ON planned (user_id, modo);
 CREATE INDEX IF NOT EXISTS planned_month_idx ON planned (user_id, ref_month);
 CREATE INDEX IF NOT EXISTS planned_group_idx ON planned (group_id);

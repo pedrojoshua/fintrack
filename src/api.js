@@ -488,6 +488,126 @@ router.post("/planned/:id/confirmar", wrap(async (req, res) => {
 }));
 
 // ── Configurações e orçamentos ──────────────────────────
+
+// ════════════════════════════════════════════════════
+//  PATRIMÔNIO  (ações/FII, bens e consórcios)
+// ════════════════════════════════════════════════════
+const ASSET_KINDS = ["ativo", "bem", "consorcio"];
+
+const int = (v, max) => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : 0;
+};
+const money0 = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
+};
+
+// Valida e normaliza o corpo conforme o tipo. Cada tipo só usa os seus campos;
+// os restantes ficam a zero para não sujar o cálculo.
+function assetFields(kind, b) {
+  const base = {
+    name: clean(b.name, 80),
+    note: clean(b.note, 200),
+    ticker: "", quantity: 0, avg_price: 0, current_price: null,
+    value: 0, installments: 0, installments_paid: 0,
+    installment_amount: 0, start_date: null,
+  };
+  if (!base.name) return { error: "Dê um nome a este item." };
+
+  if (kind === "ativo") {
+    // O nome do papel já é o ticker; aceitar em separado é só conveniência.
+    base.ticker = (clean(b.ticker, 12) || clean(b.name, 12)).toUpperCase();
+    base.quantity = Math.max(Number(b.quantity) || 0, 0);
+    base.avg_price = money0(b.avg_price);
+    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== "") {
+      base.current_price = money0(b.current_price);
+    }
+    if (base.quantity <= 0) return { error: "Informe a quantidade de cotas." };
+    if (base.avg_price <= 0) return { error: "Informe o preço médio pago." };
+  } else if (kind === "bem") {
+    base.value = money0(b.value);
+    if (base.value <= 0) return { error: "Informe quanto o bem vale hoje." };
+  } else {
+    base.installments = int(b.installments, 600);
+    base.installments_paid = int(b.installments_paid, 600);
+    base.installment_amount = money0(b.installment_amount);
+    base.start_date = b.start_date ? parseDate(b.start_date) : null;
+    if (base.installments <= 0) return { error: "Informe o total de parcelas." };
+    if (base.installment_amount <= 0) return { error: "Informe o valor da parcela." };
+    if (base.installments_paid > base.installments) {
+      return { error: "As parcelas pagas não podem passar do total contratado." };
+    }
+  }
+  return { fields: base };
+}
+
+const ASSET_COLS = ["name", "note", "ticker", "quantity", "avg_price", "current_price",
+  "value", "installments", "installments_paid", "installment_amount", "start_date"];
+
+router.get("/assets", wrap(async (req, res) => res.json(await money.getAssets(req.user.id))));
+
+router.get("/networth", wrap(async (req, res) => res.json(await money.getNetWorth(req.user.id))));
+
+router.post("/assets", wrap(async (req, res) => {
+  const b = req.body || {};
+  if (!ASSET_KINDS.includes(b.kind)) return res.status(400).json({ error: "Tipo inválido." });
+  const { fields, error } = assetFields(b.kind, b);
+  if (error) return res.status(400).json({ error });
+
+  const vals = [req.user.id, b.kind, ...ASSET_COLS.map((c) => fields[c])];
+  const ph = vals.map((_, i) => "$" + (i + 1)).join(",");
+  const row = await db.one(
+    `INSERT INTO assets (user_id, kind, ${ASSET_COLS.join(", ")}) VALUES (${ph}) RETURNING *`,
+    vals
+  );
+  res.status(201).json(row);
+}));
+
+router.patch("/assets/:id", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const owned = await db.one("SELECT * FROM assets WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!owned) return res.status(404).json({ error: "Item não encontrado." });
+
+  const b = req.body || {};
+  const kind = ASSET_KINDS.includes(b.kind) ? b.kind : owned.kind;
+  // Campos omitidos mantêm o valor atual — o cliente pode mandar só o que mudou.
+  const merged = { ...owned, ...b };
+  const { fields, error } = assetFields(kind, merged);
+  if (error) return res.status(400).json({ error });
+
+  const cols = ["kind", ...ASSET_COLS];
+  const vals = [kind, ...ASSET_COLS.map((c) => fields[c])];
+  const sets = cols.map((c, i) => `${c} = ${i + 1}`).join(", ");
+  const row = await db.one(
+    `UPDATE assets SET ${sets}, updated_at = now()
+      WHERE id = ${vals.length + 1} AND user_id = ${vals.length + 2} RETURNING *`,
+    [...vals, id, req.user.id]
+  );
+  res.json(row);
+}));
+
+// Atalho do consórcio: registar mais uma parcela paga.
+router.post("/assets/:id/parcela", wrap(async (req, res) => {
+  const row = await db.one(
+    `UPDATE assets SET installments_paid = LEAST(installments_paid + 1, installments),
+                       updated_at = now()
+      WHERE id = $1 AND user_id = $2 AND kind = 'consorcio' RETURNING *`,
+    [Number(req.params.id), req.user.id]
+  );
+  if (!row) return res.status(404).json({ error: "Consórcio não encontrado." });
+  res.json(row);
+}));
+
+router.delete("/assets/:id", wrap(async (req, res) => {
+  const row = await db.one(
+    "DELETE FROM assets WHERE id = $1 AND user_id = $2 RETURNING id",
+    [Number(req.params.id), req.user.id]
+  );
+  if (!row) return res.status(404).json({ error: "Item não encontrado." });
+  res.json({ ok: true });
+}));
+
 router.get("/settings", wrap(async (req, res) => res.json(await money.getSettings(req.user.id))));
 router.post("/settings", wrap(async (req, res) => res.json(await money.saveSettings(req.user.id, req.body || {}))));
 
