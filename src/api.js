@@ -10,12 +10,7 @@ const cats = require("./categories");
 const router = express.Router();
 
 const TIPOS = ["entrada", "saida", "aporte", "resgate", "rendimento"];
-// bem      → moto, carro, imóvel: vale dinheiro mas não é conta
-// consorcio → tem parcela e prazo, e só parte dele já é sua
-const KINDS = ["corrente", "reserva", "investimento", "meta", "bem", "consorcio"];
-
-// Inteiro ≥ 0 ou null; usado nas parcelas do consórcio.
-const inteiro = (v) => (Number.isInteger(Number(v)) && Number(v) >= 0 ? Number(v) : null);
+const KINDS = ["corrente", "reserva", "investimento", "meta"];
 const ACCOUNT_TIPOS = ["aporte", "resgate", "rendimento"];
 
 // ── Validação ────────────────────────────────────────
@@ -265,13 +260,11 @@ router.post("/accounts", wrap(async (req, res) => {
   if (!KINDS.includes(b.kind)) return res.status(400).json({ error: "Tipo de conta inválido." });
 
   const row = await db.one(
-    `INSERT INTO accounts (user_id, name, kind, institution, goal, expected_yield, opening_balance,
-                           target_date, parcela_valor, parcelas_total, parcelas_pagas)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    `INSERT INTO accounts (user_id, name, kind, institution, goal, expected_yield, opening_balance, target_date)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
     [req.user.id, name, b.kind, clean(b.institution, 60),
      Number(b.goal) || 0, Number(b.expected_yield) || 0,
-     Number(b.opening_balance) || 0, parseDate(b.target_date) || null,
-     Number(b.parcela_valor) || null, inteiro(b.parcelas_total), inteiro(b.parcelas_pagas) || 0]
+     Number(b.opening_balance) || 0, parseDate(b.target_date) || null]
   );
   res.status(201).json(row);
 }));
@@ -294,9 +287,6 @@ router.patch("/accounts/:id", wrap(async (req, res) => {
   if (b.target_date !== undefined) push("target_date", parseDate(b.target_date) || null);
   if (b.archived !== undefined) push("archived", !!b.archived);
   if (b.kind !== undefined && KINDS.includes(b.kind)) push("kind", b.kind);
-  if (b.parcela_valor !== undefined) push("parcela_valor", Number(b.parcela_valor) || null);
-  if (b.parcelas_total !== undefined) push("parcelas_total", inteiro(b.parcelas_total));
-  if (b.parcelas_pagas !== undefined) push("parcelas_pagas", inteiro(b.parcelas_pagas) || 0);
 
   if (!sets.length) return res.status(400).json({ error: "Nada para atualizar." });
 
@@ -346,161 +336,6 @@ router.delete("/accounts/:id", wrap(async (req, res) => {
   );
   if (!row) return res.status(404).json({ error: "Conta não encontrada." });
   res.json({ ok: true });
-}));
-
-// ── Bolsa: buscar papéis ─────────────────────────────
-// Só informação de mercado. O app não sugere o que comprar — mostra preço,
-// variação e setor para o usuário decidir (ou levar ao assessor dele).
-const mercado = require("./mercado");
-const entrada = require("./entrada");
-
-router.get("/mercado/buscar", wrap(async (req, res) => {
-  const tipo = ["acao", "fii", "etf", "bdr"].includes(req.query.tipo) ? req.query.tipo : null;
-  const limite = Math.min(Number(req.query.limite) || 20, 50);
-  res.json({
-    papeis: await mercado.buscar(clean(req.query.q, 40), { tipo, limite }),
-    fonte: mercado.estado(),
-  });
-}));
-
-// ── Carteira ─────────────────────────────────────────
-router.get("/carteira", wrap(async (req, res) => res.json(await money.getCarteira(req.user.id))));
-
-// Campo único: "PETR4 100 32,50". A tela manda a frase e o servidor separa.
-// Só devolve o que entendeu — quem confirma é o usuário, na tela.
-router.post("/carteira/interpretar", wrap(async (req, res) => {
-  const lido = entrada.compra(clean(req.body?.texto, 120));
-  if (lido.erro) return res.status(400).json({ error: lido.erro });
-
-  const papel = await mercado.info(lido.ticker);
-  if (!papel) return res.status(404).json({ error: `Não achei "${lido.ticker}" na B3.` });
-
-  // Sem preço na frase, sugere o do dia — é o caso de quem acabou de comprar.
-  const preco_medio = lido.preco_medio ?? papel.preco;
-  const quantidade = lido.quantidade ?? null;
-
-  res.json({
-    ticker: papel.codigo, nome: papel.nome, logo: papel.logo, tipo: papel.tipo,
-    preco_hoje: papel.preco, variacao: papel.variacao,
-    quantidade, preco_medio,
-    preco_sugerido: lido.preco_medio === undefined,
-    falta: quantidade ? null : "quantidade",
-    total: quantidade ? Math.round(quantidade * preco_medio * 100) / 100 : null,
-  });
-}));
-
-router.post("/carteira", wrap(async (req, res) => {
-  const ticker = clean(req.body?.ticker, 12).toUpperCase();
-  if (!ticker) return res.status(400).json({ error: "Informe o código do papel." });
-  if (!(await mercado.existe(ticker))) {
-    return res.status(404).json({ error: `Não encontrei o papel "${ticker}" na B3.` });
-  }
-
-  const qtd = Number(req.body?.quantidade);
-  const pm = Number(req.body?.preco_medio);
-  if (!(qtd > 0)) return res.status(400).json({ error: "Quantidade tem de ser maior que zero." });
-  if (!(pm > 0)) return res.status(400).json({ error: "Preço pago tem de ser maior que zero." });
-
-  // Comprar de novo o mesmo papel recalcula o preço médio em vez de
-  // sobrescrever — senão o lucro/prejuízo fica errado.
-  const row = await db.one(
-    `INSERT INTO holdings (user_id, ticker, quantidade, preco_medio)
-     VALUES ($1,$2,$3,$4)
-     ON CONFLICT (user_id, ticker) DO UPDATE SET
-       preco_medio = ((holdings.quantidade * holdings.preco_medio) + (EXCLUDED.quantidade * EXCLUDED.preco_medio))
-                     / (holdings.quantidade + EXCLUDED.quantidade),
-       quantidade  = holdings.quantidade + EXCLUDED.quantidade
-     RETURNING *`,
-    [req.user.id, ticker, qtd, pm]
-  );
-  res.status(201).json(row);
-}));
-
-// Corrigir a posição inteira (quantidade e preço médio, sem somar).
-router.patch("/carteira/:id", wrap(async (req, res) => {
-  const id = Number(req.params.id);
-  const owned = await db.one("SELECT id FROM holdings WHERE id = $1 AND user_id = $2", [id, req.user.id]);
-  if (!owned) return res.status(404).json({ error: "Papel não encontrado na carteira." });
-
-  const sets = [], params = [];
-  const push = (c, v) => { params.push(v); sets.push(`${c} = $${params.length}`); };
-
-  if (req.body?.quantidade !== undefined) {
-    const q = Number(req.body.quantidade);
-    if (!(q > 0)) return res.status(400).json({ error: "Quantidade inválida." });
-    push("quantidade", q);
-  }
-  if (req.body?.preco_medio !== undefined) {
-    const p = Number(req.body.preco_medio);
-    if (!(p > 0)) return res.status(400).json({ error: "Preço inválido." });
-    push("preco_medio", p);
-  }
-  if (!sets.length) return res.status(400).json({ error: "Nada para atualizar." });
-
-  params.push(id, req.user.id);
-  res.json(await db.one(
-    `UPDATE holdings SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
-    params
-  ));
-}));
-
-router.delete("/carteira/:id", wrap(async (req, res) => {
-  const row = await db.one("DELETE FROM holdings WHERE id = $1 AND user_id = $2 RETURNING id",
-    [Number(req.params.id), req.user.id]);
-  if (!row) return res.status(404).json({ error: "Papel não encontrado na carteira." });
-  res.json({ ok: true });
-}));
-
-// ── Património: bens e consórcio ─────────────────────
-router.get("/patrimonio", wrap(async (req, res) => res.json(await money.getPatrimonio(req.user.id))));
-
-// Campo único para bem: "Moto Honda CB 300 18000".
-// O valor vira opening_balance porque um bem não recebe aportes — vale o que vale.
-router.post("/bens", wrap(async (req, res) => {
-  const lido = entrada.bem(clean(req.body?.texto, 120));
-  if (lido.erro) return res.status(400).json({ error: lido.erro });
-  if (lido.falta === "name") return res.status(400).json({ error: "Falta dizer o que é. Ex.: Moto Honda 18000" });
-
-  res.status(201).json(await db.one(
-    `INSERT INTO accounts (user_id, name, kind, opening_balance) VALUES ($1,$2,'bem',$3) RETURNING *`,
-    [req.user.id, lido.name.slice(0, 60), lido.valor]
-  ));
-}));
-
-// Campo único para consórcio: "Consórcio imóvel 80000 em 120 parcelas de 850, paguei 12".
-router.post("/consorcios", wrap(async (req, res) => {
-  const lido = entrada.consorcio(clean(req.body?.texto, 160));
-  if (lido.erro) return res.status(400).json({ error: lido.erro });
-  if (lido.falta === "parcela_valor") return res.status(400).json({ error: "Falta o valor da parcela. Ex.: 120 parcelas de 850" });
-  if (lido.falta === "parcelas_total") return res.status(400).json({ error: "Falta o prazo. Ex.: em 120 parcelas" });
-
-  res.status(201).json(await db.one(
-    `INSERT INTO accounts (user_id, name, kind, goal, parcela_valor, parcelas_total, parcelas_pagas)
-     VALUES ($1,$2,'consorcio',$3,$4,$5,$6) RETURNING *`,
-    [req.user.id, lido.name.slice(0, 60), lido.goal, lido.parcela_valor, lido.parcelas_total, lido.parcelas_pagas]
-  ));
-}));
-
-// Marcar parcelas pagas do consórcio.
-router.post("/accounts/:id/parcelas", wrap(async (req, res) => {
-  const id = Number(req.params.id);
-  const acc = await db.one(
-    "SELECT id, parcelas_total FROM accounts WHERE id = $1 AND user_id = $2 AND kind = 'consorcio'",
-    [id, req.user.id]
-  );
-  if (!acc) return res.status(404).json({ error: "Consórcio não encontrado." });
-
-  const pagas = Number(req.body?.parcelas_pagas);
-  if (!Number.isInteger(pagas) || pagas < 0) {
-    return res.status(400).json({ error: "Número de parcelas pagas inválido." });
-  }
-  if (acc.parcelas_total && pagas > acc.parcelas_total) {
-    return res.status(400).json({ error: `São ${acc.parcelas_total} parcelas no total.` });
-  }
-  res.json(await db.one(
-    "UPDATE accounts SET parcelas_pagas = $1 WHERE id = $2 AND user_id = $3 RETURNING *",
-    [pagas, id, req.user.id]
-  ));
 }));
 
 // ── Painéis ──────────────────────────────────────────
@@ -653,6 +488,126 @@ router.post("/planned/:id/confirmar", wrap(async (req, res) => {
 }));
 
 // ── Configurações e orçamentos ──────────────────────────
+
+// ════════════════════════════════════════════════════
+//  PATRIMÔNIO  (ações/FII, bens e consórcios)
+// ════════════════════════════════════════════════════
+const ASSET_KINDS = ["ativo", "bem", "consorcio"];
+
+const int = (v, max) => {
+  const n = Math.trunc(Number(v));
+  return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : 0;
+};
+const money0 = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
+};
+
+// Valida e normaliza o corpo conforme o tipo. Cada tipo só usa os seus campos;
+// os restantes ficam a zero para não sujar o cálculo.
+function assetFields(kind, b) {
+  const base = {
+    name: clean(b.name, 80),
+    note: clean(b.note, 200),
+    ticker: "", quantity: 0, avg_price: 0, current_price: null,
+    value: 0, installments: 0, installments_paid: 0,
+    installment_amount: 0, start_date: null,
+  };
+  if (!base.name) return { error: "Dê um nome a este item." };
+
+  if (kind === "ativo") {
+    // O nome do papel já é o ticker; aceitar em separado é só conveniência.
+    base.ticker = (clean(b.ticker, 12) || clean(b.name, 12)).toUpperCase();
+    base.quantity = Math.max(Number(b.quantity) || 0, 0);
+    base.avg_price = money0(b.avg_price);
+    if (b.current_price !== undefined && b.current_price !== null && b.current_price !== "") {
+      base.current_price = money0(b.current_price);
+    }
+    if (base.quantity <= 0) return { error: "Informe a quantidade de cotas." };
+    if (base.avg_price <= 0) return { error: "Informe o preço médio pago." };
+  } else if (kind === "bem") {
+    base.value = money0(b.value);
+    if (base.value <= 0) return { error: "Informe quanto o bem vale hoje." };
+  } else {
+    base.installments = int(b.installments, 600);
+    base.installments_paid = int(b.installments_paid, 600);
+    base.installment_amount = money0(b.installment_amount);
+    base.start_date = b.start_date ? parseDate(b.start_date) : null;
+    if (base.installments <= 0) return { error: "Informe o total de parcelas." };
+    if (base.installment_amount <= 0) return { error: "Informe o valor da parcela." };
+    if (base.installments_paid > base.installments) {
+      return { error: "As parcelas pagas não podem passar do total contratado." };
+    }
+  }
+  return { fields: base };
+}
+
+const ASSET_COLS = ["name", "note", "ticker", "quantity", "avg_price", "current_price",
+  "value", "installments", "installments_paid", "installment_amount", "start_date"];
+
+router.get("/assets", wrap(async (req, res) => res.json(await money.getAssets(req.user.id))));
+
+router.get("/networth", wrap(async (req, res) => res.json(await money.getNetWorth(req.user.id))));
+
+router.post("/assets", wrap(async (req, res) => {
+  const b = req.body || {};
+  if (!ASSET_KINDS.includes(b.kind)) return res.status(400).json({ error: "Tipo inválido." });
+  const { fields, error } = assetFields(b.kind, b);
+  if (error) return res.status(400).json({ error });
+
+  const vals = [req.user.id, b.kind, ...ASSET_COLS.map((c) => fields[c])];
+  const ph = vals.map((_, i) => "$" + (i + 1)).join(",");
+  const row = await db.one(
+    `INSERT INTO assets (user_id, kind, ${ASSET_COLS.join(", ")}) VALUES (${ph}) RETURNING *`,
+    vals
+  );
+  res.status(201).json(row);
+}));
+
+router.patch("/assets/:id", wrap(async (req, res) => {
+  const id = Number(req.params.id);
+  const owned = await db.one("SELECT * FROM assets WHERE id = $1 AND user_id = $2", [id, req.user.id]);
+  if (!owned) return res.status(404).json({ error: "Item não encontrado." });
+
+  const b = req.body || {};
+  const kind = ASSET_KINDS.includes(b.kind) ? b.kind : owned.kind;
+  // Campos omitidos mantêm o valor atual — o cliente pode mandar só o que mudou.
+  const merged = { ...owned, ...b };
+  const { fields, error } = assetFields(kind, merged);
+  if (error) return res.status(400).json({ error });
+
+  const cols = ["kind", ...ASSET_COLS];
+  const vals = [kind, ...ASSET_COLS.map((c) => fields[c])];
+  const sets = cols.map((c, i) => `${c} = ${i + 1}`).join(", ");
+  const row = await db.one(
+    `UPDATE assets SET ${sets}, updated_at = now()
+      WHERE id = ${vals.length + 1} AND user_id = ${vals.length + 2} RETURNING *`,
+    [...vals, id, req.user.id]
+  );
+  res.json(row);
+}));
+
+// Atalho do consórcio: registar mais uma parcela paga.
+router.post("/assets/:id/parcela", wrap(async (req, res) => {
+  const row = await db.one(
+    `UPDATE assets SET installments_paid = LEAST(installments_paid + 1, installments),
+                       updated_at = now()
+      WHERE id = $1 AND user_id = $2 AND kind = 'consorcio' RETURNING *`,
+    [Number(req.params.id), req.user.id]
+  );
+  if (!row) return res.status(404).json({ error: "Consórcio não encontrado." });
+  res.json(row);
+}));
+
+router.delete("/assets/:id", wrap(async (req, res) => {
+  const row = await db.one(
+    "DELETE FROM assets WHERE id = $1 AND user_id = $2 RETURNING id",
+    [Number(req.params.id), req.user.id]
+  );
+  if (!row) return res.status(404).json({ error: "Item não encontrado." });
+  res.json({ ok: true });
+}));
+
 router.get("/settings", wrap(async (req, res) => res.json(await money.getSettings(req.user.id))));
 router.post("/settings", wrap(async (req, res) => res.json(await money.saveSettings(req.user.id, req.body || {}))));
 

@@ -49,7 +49,6 @@ const ACCOUNTS_SQL = `
   SELECT
     a.id, a.name, a.kind, a.institution, a.goal, a.expected_yield,
     a.opening_balance, a.target_date, a.archived, a.created_at,
-    a.parcela_valor, a.parcelas_total, a.parcelas_pagas,
     a.opening_balance
       + COALESCE(SUM(CASE t.tipo WHEN 'aporte'     THEN  t.amount
                                  WHEN 'rendimento' THEN  t.amount
@@ -315,110 +314,6 @@ async function getPlanned(userId, month, year) {
   };
 }
 
-// ── Carteira de papéis ───────────────────────────────
-// O preço vem da bolsa na hora; o banco guarda só quantidade e preço médio.
-async function getCarteira(userId) {
-  const mercado = require("./mercado");
-  const rows = await db.query(
-    "SELECT * FROM holdings WHERE user_id = $1 ORDER BY ticker",
-    [userId]
-  );
-  if (!rows.length) {
-    return { itens: [], total: 0, investido: 0, resultado: 0, resultado_pct: 0, atualizado: mercado.estado() };
-  }
-
-  const cot = await mercado.precos(rows.map((r) => r.ticker));
-
-  const itens = rows.map((r) => {
-    const q = Number(r.quantidade), pm = Number(r.preco_medio);
-    const c = cot[r.ticker];
-    const precoAtual = c ? c.preco : pm; // sem cotação, mostra o custo
-    const custo = round2(q * pm);
-    const atual = round2(q * precoAtual);
-    return {
-      id: r.id, ticker: r.ticker,
-      nome: c?.nome || "", logo: c?.logo || null, tipo: c?.tipo || "outro",
-      quantidade: q, preco_medio: round2(pm),
-      preco_atual: round2(precoAtual),
-      variacao_dia: c ? round2(c.variacao) : 0,
-      custo, atual,
-      resultado: round2(atual - custo),
-      resultado_pct: custo > 0 ? round2(((atual - custo) / custo) * 100) : 0,
-      sem_cotacao: !c,
-    };
-  });
-
-  const investido = round2(itens.reduce((s, i) => s + i.custo, 0));
-  const total = round2(itens.reduce((s, i) => s + i.atual, 0));
-
-  // Peso de cada papel, para ver concentração.
-  for (const i of itens) i.peso = total > 0 ? round2((i.atual / total) * 100) : 0;
-  itens.sort((a, b) => b.atual - a.atual);
-
-  return {
-    itens, total, investido,
-    resultado: round2(total - investido),
-    resultado_pct: investido > 0 ? round2(((total - investido) / investido) * 100) : 0,
-    atualizado: mercado.estado(),
-  };
-}
-
-// ── Bens e consórcio ─────────────────────────────────
-async function getPatrimonio(userId) {
-  const contas = await getAccounts(userId);
-  const carteira = await getCarteira(userId);
-
-  const soma = (k) => round2(contas.filter((a) => a.kind === k).reduce((s, a) => s + a.balance, 0));
-
-  const bens = contas.filter((a) => a.kind === "bem");
-  const consorcios = contas.filter((a) => a.kind === "consorcio").map((a) => {
-    const total = Number(a.parcelas_total) || 0;
-    const pagas = Math.min(Number(a.parcelas_pagas) || 0, total || Infinity);
-    const parcela = Number(a.parcela_valor) || 0;
-    const restantes = Math.max(total - pagas, 0);
-
-    // Data prevista de quitação, contando uma parcela por mês a partir de agora.
-    let quitacao = null;
-    if (restantes > 0) {
-      const d = new Date();
-      d.setMonth(d.getMonth() + restantes);
-      quitacao = d.toISOString().slice(0, 10);
-    }
-    return {
-      id: a.id, name: a.name, institution: a.institution,
-      valor_carta: round2(a.goal),
-      parcela, parcelas_total: total, parcelas_pagas: pagas, parcelas_restantes: restantes,
-      ja_pago: round2(pagas * parcela),
-      falta_pagar: round2(restantes * parcela),
-      progresso_pct: total > 0 ? round2((pagas / total) * 100) : 0,
-      anos_restantes: restantes > 0 ? round2(restantes / 12) : 0,
-      quitacao_em: quitacao,
-      quitado: total > 0 && restantes === 0,
-    };
-  });
-
-  const valorBens = round2(bens.reduce((s, a) => s + a.balance, 0));
-  const consorcioPago = round2(consorcios.reduce((s, c) => s + c.ja_pago, 0));
-  const consorcioFalta = round2(consorcios.reduce((s, c) => s + c.falta_pagar, 0));
-
-  const liquido = round2(soma("corrente") + soma("reserva") + soma("investimento") + soma("meta"));
-
-  return {
-    // O que já é seu hoje.
-    em_conta: soma("corrente"),
-    reserva: soma("reserva"),
-    investido: soma("investimento") + soma("meta"),
-    carteira: carteira.total,
-    bens: valorBens,
-    consorcio_pago: consorcioPago,
-    total: round2(liquido + carteira.total + valorBens + consorcioPago),
-    // Compromisso que ainda existe — mostrado à parte, não descontado do total.
-    consorcio_falta: consorcioFalta,
-    lista_bens: bens.map((a) => ({ id: a.id, name: a.name, institution: a.institution, valor: a.balance })),
-    consorcios,
-  };
-}
-
 // Soma das receitas fixas ativas — é o "salário fixo" do usuário.
 async function fixedIncome(userId) {
   const row = await db.one(
@@ -429,11 +324,103 @@ async function fixedIncome(userId) {
   return round2(row.total);
 }
 
+// ── Patrimônio: ativos, bens e consórcios ────────────
+// Nenhum destes é lançamento do mês. São o que você *tem* (e, no consórcio,
+// também o que ainda deve). Os valores derivados nunca são guardados: saem
+// sempre dos campos informados, para não dessincronizar.
+function decorateAsset(a) {
+  const out = { ...a, quantity: Number(a.quantity) || 0 };
+
+  if (a.kind === "ativo") {
+    // Sem preço atual informado, o ativo vale o que custou — nunca inventamos
+    // cotação nem consultamos mercado.
+    const price = a.current_price != null ? Number(a.current_price) : Number(a.avg_price);
+    out.cost = round2(out.quantity * Number(a.avg_price));
+    out.value = round2(out.quantity * price);
+    out.gain = round2(out.value - out.cost);
+    out.gain_pct = out.cost > 0 ? round2((out.gain / out.cost) * 100) : 0;
+    out.priced = a.current_price != null;
+    out.debt = 0;
+  } else if (a.kind === "consorcio") {
+    const total = a.installments;
+    const paidN = a.installments_paid;
+    const parcela = Number(a.installment_amount);
+    const left = Math.max(total - paidN, 0);
+    out.paid_total = round2(paidN * parcela);
+    out.debt = round2(left * parcela);
+    out.contract_total = round2(total * parcela);
+    // Enquanto não é contemplado, o que você tem é o que já pagou.
+    out.value = out.paid_total;
+    out.installments_left = left;
+    out.progress_pct = total > 0 ? round2((paidN / total) * 100) : 0;
+    out.years_left = round2(left / 12);
+    out.payoff_date = payoffDate(a.start_date, total, paidN);
+  } else {
+    out.value = round2(Number(a.value));
+    out.debt = 0;
+  }
+  return out;
+}
+
+// Mês em que a última parcela cai, contando do início do contrato.
+function payoffDate(startDate, total, paid) {
+  const left = Math.max(total - paid, 0);
+  if (!left) return null;
+  const base = startDate ? new Date(startDate + "T00:00:00") : new Date();
+  // Com data de início conhecida, a última parcela é a de número `total`.
+  // Sem ela, contamos as que faltam a partir de hoje.
+  const months = startDate ? total - 1 : left;
+  const d = new Date(base.getFullYear(), base.getMonth() + months, 1);
+  return d.toISOString().slice(0, 7);
+}
+
+async function getAssets(userId) {
+  const rows = await db.query(
+    "SELECT * FROM assets WHERE user_id = $1 AND archived = false ORDER BY kind, created_at",
+    [userId]
+  );
+  const list = rows.map(decorateAsset);
+  const of = (k) => list.filter((a) => a.kind === k);
+  const sum = (l, f) => round2(l.reduce((s, a) => s + f(a), 0));
+
+  const ativos = of("ativo");
+  const bens = of("bem");
+  const cons = of("consorcio");
+
+  return {
+    assets: list,
+    ativos, bens, consorcios: cons,
+    ativos_value: sum(ativos, (a) => a.value),
+    ativos_cost: sum(ativos, (a) => a.cost),
+    ativos_gain: sum(ativos, (a) => a.gain),
+    bens_value: sum(bens, (a) => a.value),
+    consorcio_paid: sum(cons, (a) => a.paid_total),
+    consorcio_debt: sum(cons, (a) => a.debt),
+    consorcio_monthly: sum(cons, (a) => (a.installments_left > 0 ? Number(a.installment_amount) : 0)),
+    total_value: sum(list, (a) => a.value),
+    total_debt: sum(list, (a) => a.debt),
+  };
+}
+
+// Patrimônio líquido: contas + ativos + bens − o que ainda se deve.
+async function getNetWorth(userId) {
+  const accounts = await getAccounts(userId);
+  const assets = await getAssets(userId);
+  const accountsTotal = round2(accounts.reduce((s, a) => s + a.balance, 0));
+  return {
+    accounts_total: accountsTotal,
+    assets_total: assets.total_value,
+    debt_total: assets.total_debt,
+    net_worth: round2(accountsTotal + assets.total_value - assets.total_debt),
+    assets,
+  };
+}
+
 module.exports = {
   DEFAULT_SETTINGS, round2,
   getSettings, saveSettings,
   getAccounts, getReserve, getInvestments,
   getSummary, averageMonthlyExpense,
   getPlanned, fixedIncome,
-  getCarteira, getPatrimonio,
+  getAssets, getNetWorth,
 };
