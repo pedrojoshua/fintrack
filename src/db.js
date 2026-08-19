@@ -138,11 +138,30 @@ CREATE INDEX IF NOT EXISTS planned_user_idx  ON planned (user_id, modo);
 CREATE INDEX IF NOT EXISTS planned_month_idx ON planned (user_id, ref_month);
 CREATE INDEX IF NOT EXISTS planned_group_idx ON planned (group_id);
 
--- Bancos criados antes da conta corrente têm o CHECK antigo, que recusa
--- 'corrente'. Recriar a restrição é idempotente e não toca nos dados.
+-- Bancos criados antes destes tipos têm o CHECK antigo, que os recusaria.
+-- Recriar a restrição é idempotente e não toca nos dados.
 ALTER TABLE accounts DROP CONSTRAINT IF EXISTS accounts_kind_check;
 ALTER TABLE accounts ADD CONSTRAINT accounts_kind_check
-  CHECK (kind IN ('corrente','reserva','investimento','meta'));
+  CHECK (kind IN ('corrente','reserva','investimento','meta','bem','consorcio'));
+
+-- Consórcio e financiamento: o que importa é a parcela e o prazo.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS parcela_valor   NUMERIC(14,2);
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS parcelas_total  INTEGER;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS parcelas_pagas  INTEGER NOT NULL DEFAULT 0;
+
+-- Papéis em carteira. O preço atual vem da bolsa a cada consulta; aqui fica
+-- só o que é do usuário: quanto tem e quanto pagou.
+CREATE TABLE IF NOT EXISTS holdings (
+  id          SERIAL PRIMARY KEY,
+  user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  ticker      TEXT NOT NULL,
+  quantidade  NUMERIC(16,6) NOT NULL CHECK (quantidade > 0),
+  preco_medio NUMERIC(14,4) NOT NULL CHECK (preco_medio > 0),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, ticker)
+);
+
+CREATE INDEX IF NOT EXISTS holdings_user_idx ON holdings (user_id);
 
 CREATE INDEX IF NOT EXISTS tx_user_date_idx    ON transactions (user_id, date DESC);
 CREATE INDEX IF NOT EXISTS tx_account_idx      ON transactions (account_id);

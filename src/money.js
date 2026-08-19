@@ -49,6 +49,7 @@ const ACCOUNTS_SQL = `
   SELECT
     a.id, a.name, a.kind, a.institution, a.goal, a.expected_yield,
     a.opening_balance, a.target_date, a.archived, a.created_at,
+    a.parcela_valor, a.parcelas_total, a.parcelas_pagas,
     a.opening_balance
       + COALESCE(SUM(CASE t.tipo WHEN 'aporte'     THEN  t.amount
                                  WHEN 'rendimento' THEN  t.amount
@@ -314,6 +315,110 @@ async function getPlanned(userId, month, year) {
   };
 }
 
+// ── Carteira de papéis ───────────────────────────────
+// O preço vem da bolsa na hora; o banco guarda só quantidade e preço médio.
+async function getCarteira(userId) {
+  const mercado = require("./mercado");
+  const rows = await db.query(
+    "SELECT * FROM holdings WHERE user_id = $1 ORDER BY ticker",
+    [userId]
+  );
+  if (!rows.length) {
+    return { itens: [], total: 0, investido: 0, resultado: 0, resultado_pct: 0, atualizado: mercado.estado() };
+  }
+
+  const cot = await mercado.precos(rows.map((r) => r.ticker));
+
+  const itens = rows.map((r) => {
+    const q = Number(r.quantidade), pm = Number(r.preco_medio);
+    const c = cot[r.ticker];
+    const precoAtual = c ? c.preco : pm; // sem cotação, mostra o custo
+    const custo = round2(q * pm);
+    const atual = round2(q * precoAtual);
+    return {
+      id: r.id, ticker: r.ticker,
+      nome: c?.nome || "", logo: c?.logo || null, tipo: c?.tipo || "outro",
+      quantidade: q, preco_medio: round2(pm),
+      preco_atual: round2(precoAtual),
+      variacao_dia: c ? round2(c.variacao) : 0,
+      custo, atual,
+      resultado: round2(atual - custo),
+      resultado_pct: custo > 0 ? round2(((atual - custo) / custo) * 100) : 0,
+      sem_cotacao: !c,
+    };
+  });
+
+  const investido = round2(itens.reduce((s, i) => s + i.custo, 0));
+  const total = round2(itens.reduce((s, i) => s + i.atual, 0));
+
+  // Peso de cada papel, para ver concentração.
+  for (const i of itens) i.peso = total > 0 ? round2((i.atual / total) * 100) : 0;
+  itens.sort((a, b) => b.atual - a.atual);
+
+  return {
+    itens, total, investido,
+    resultado: round2(total - investido),
+    resultado_pct: investido > 0 ? round2(((total - investido) / investido) * 100) : 0,
+    atualizado: mercado.estado(),
+  };
+}
+
+// ── Bens e consórcio ─────────────────────────────────
+async function getPatrimonio(userId) {
+  const contas = await getAccounts(userId);
+  const carteira = await getCarteira(userId);
+
+  const soma = (k) => round2(contas.filter((a) => a.kind === k).reduce((s, a) => s + a.balance, 0));
+
+  const bens = contas.filter((a) => a.kind === "bem");
+  const consorcios = contas.filter((a) => a.kind === "consorcio").map((a) => {
+    const total = Number(a.parcelas_total) || 0;
+    const pagas = Math.min(Number(a.parcelas_pagas) || 0, total || Infinity);
+    const parcela = Number(a.parcela_valor) || 0;
+    const restantes = Math.max(total - pagas, 0);
+
+    // Data prevista de quitação, contando uma parcela por mês a partir de agora.
+    let quitacao = null;
+    if (restantes > 0) {
+      const d = new Date();
+      d.setMonth(d.getMonth() + restantes);
+      quitacao = d.toISOString().slice(0, 10);
+    }
+    return {
+      id: a.id, name: a.name, institution: a.institution,
+      valor_carta: round2(a.goal),
+      parcela, parcelas_total: total, parcelas_pagas: pagas, parcelas_restantes: restantes,
+      ja_pago: round2(pagas * parcela),
+      falta_pagar: round2(restantes * parcela),
+      progresso_pct: total > 0 ? round2((pagas / total) * 100) : 0,
+      anos_restantes: restantes > 0 ? round2(restantes / 12) : 0,
+      quitacao_em: quitacao,
+      quitado: total > 0 && restantes === 0,
+    };
+  });
+
+  const valorBens = round2(bens.reduce((s, a) => s + a.balance, 0));
+  const consorcioPago = round2(consorcios.reduce((s, c) => s + c.ja_pago, 0));
+  const consorcioFalta = round2(consorcios.reduce((s, c) => s + c.falta_pagar, 0));
+
+  const liquido = round2(soma("corrente") + soma("reserva") + soma("investimento") + soma("meta"));
+
+  return {
+    // O que já é seu hoje.
+    em_conta: soma("corrente"),
+    reserva: soma("reserva"),
+    investido: soma("investimento") + soma("meta"),
+    carteira: carteira.total,
+    bens: valorBens,
+    consorcio_pago: consorcioPago,
+    total: round2(liquido + carteira.total + valorBens + consorcioPago),
+    // Compromisso que ainda existe — mostrado à parte, não descontado do total.
+    consorcio_falta: consorcioFalta,
+    lista_bens: bens.map((a) => ({ id: a.id, name: a.name, institution: a.institution, valor: a.balance })),
+    consorcios,
+  };
+}
+
 // Soma das receitas fixas ativas — é o "salário fixo" do usuário.
 async function fixedIncome(userId) {
   const row = await db.one(
@@ -330,4 +435,5 @@ module.exports = {
   getAccounts, getReserve, getInvestments,
   getSummary, averageMonthlyExpense,
   getPlanned, fixedIncome,
+  getCarteira, getPatrimonio,
 };

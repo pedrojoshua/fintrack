@@ -117,8 +117,10 @@ nav a{
 }
 nav a.active{color:var(--brand);border-top-color:var(--brand);}
 nav a.active .ic{color:var(--brand);}
-/* Barra de abas do celular fica em 5 — Configurações sobe para o topo. */
+/* Barra de abas do celular fica em 6 — Configurações sobe para o topo. */
 nav a.hide-mobile{display:none;}
+nav a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+@media (max-width:400px){ nav a{font-size:11px;padding:9px 1px;} }
 
 /* Item de grid/flex não encolhe abaixo do conteúdo sem isto (min-width:auto
    é o padrão), e um nome de conta comprido empurra a página para o lado. */
@@ -168,6 +170,7 @@ nav a.hide-mobile{display:none;}
 
 .row2{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px;}
 .panel{background:var(--s1);border:1px solid var(--bd);border-radius:var(--r);padding:17px;box-shadow:var(--sh);}
+.panel-note{font-size:12px;font-weight:500;color:var(--t3);}
 .panel-title{font-size:12px;font-weight:700;color:var(--t2);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;letter-spacing:.1px;}
 /* Link de canto de painel: o texto é curto, mas a área de toque não pode
    ser. O padding negativo mantém o alinhamento visual com o título. */
@@ -356,6 +359,56 @@ nav a.hide-mobile{display:none;}
 .toast.error{background:#991B1B;}
 .toast.info{background:#1E3A8A;}
 
+/* ── Campo único ──
+   O usuário escreve uma frase e o servidor separa os pedaços. Um input só,
+   grande, sem rótulo: é a diferença entre parecer um formulário e parecer
+   uma ferramenta. */
+.uno{display:flex;gap:8px;align-items:stretch;}
+.uno input{flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r-sm);
+  padding:0 14px;min-height:48px;font-size:15px;font-family:var(--sans);color:var(--t);}
+.uno input::placeholder{color:var(--t4);}
+.uno input:focus{border-color:var(--brand);background:var(--s1);outline:none;box-shadow:0 0 0 3px var(--brand-dim);}
+.uno .btn{flex:0 0 auto;min-height:48px;}
+.uno-hint{font-size:12px;color:var(--t3);margin-top:8px;line-height:1.5;}
+.uno-hint b{color:var(--t2);font-weight:600;}
+
+/* Cartão de confirmação do que foi entendido, antes de gravar. */
+.lido{margin-top:12px;border:1px solid var(--bd);border-radius:var(--r-sm);padding:13px;background:var(--s2);
+  display:flex;align-items:center;gap:12px;}
+.lido.erro{border-color:var(--bd2);background:var(--neg-dim);color:var(--neg);font-size:13px;}
+.lido-logo{width:34px;height:34px;border-radius:8px;object-fit:contain;background:var(--s1);
+  border:1px solid var(--bd);flex:0 0 auto;}
+.lido-main{flex:1;min-width:0;}
+.lido-cod{font-size:14px;font-weight:700;letter-spacing:.2px;}
+.lido-nome{font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lido-val{text-align:right;flex:0 0 auto;}
+.lido-total{font-size:15px;font-weight:600;}
+.lido-sub{font-size:11px;color:var(--t3);}
+
+/* ── Linha de papel (carteira e busca) ── */
+.pap{display:flex;align-items:center;gap:11px;padding:12px 2px;border-bottom:1px solid var(--bd);}
+.pap:last-child{border-bottom:none;}
+.pap-logo{width:32px;height:32px;border-radius:7px;object-fit:contain;background:var(--s2);
+  border:1px solid var(--bd);flex:0 0 auto;}
+.pap-sem{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t3);}
+.pap-main{flex:1;min-width:0;}
+.pap-cod{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;}
+.pap-nome{font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pap-val{text-align:right;flex:0 0 auto;min-width:0;}
+.pap-preco{font-size:14px;font-weight:600;}
+.pap-var{font-size:12px;}
+.tag{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:2px 6px;
+  border-radius:4px;background:var(--s3);color:var(--t3);}
+.tag.fii{background:var(--brand-dim);color:var(--brand);}
+.tag.acao{background:var(--pos-dim);color:var(--pos);}
+
+/* Barra de progresso do consórcio. */
+.cons{padding:13px 0;border-bottom:1px solid var(--bd);}
+.cons:last-child{border-bottom:none;}
+.cons-bar{height:5px;border-radius:99px;background:var(--s3);overflow:hidden;margin:9px 0 7px;}
+.cons-fill{height:100%;background:var(--brand);border-radius:99px;}
+.cons-legend{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--t3);}
+
 .empty{text-align:center;padding:30px 18px;color:var(--t3);}
 .empty-ico{width:52px;height:52px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:var(--t4);}
 .empty p{font-size:15px;color:var(--t2);font-weight:600;}
@@ -534,10 +587,11 @@ nav a.hide-mobile{display:none;}
     <div class="sb-section">Gestão</div>
     <nav aria-label="Navegação principal">
       <a class="active" data-panel="dashboard"     onclick="showPanel('dashboard',this)"><svg class="ic"><use href="#i-home"/></svg><span>Início</span></a>
-      <a data-panel="lançamentos"    onclick="showPanel('lançamentos',this)"><svg class="ic"><use href="#i-list"/></svg><span>Lançamentos</span></a>
+      <a data-panel="lançamentos"    onclick="showPanel('lançamentos',this)"><svg class="ic"><use href="#i-list"/></svg><span>Extrato</span></a>
       <a data-panel="planejamento"   onclick="showPanel('planejamento',this)"><svg class="ic"><use href="#i-calendar"/></svg><span>Planos</span></a>
       <a data-panel="reserva"       onclick="showPanel('reserva',this)"><svg class="ic"><use href="#i-shield"/></svg><span>Reserva</span></a>
       <a data-panel="investimentos" onclick="showPanel('investimentos',this)"><svg class="ic"><use href="#i-trend"/></svg><span>Investir</span></a>
+      <a data-panel="bolsa" onclick="showPanel('bolsa',this)"><svg class="ic"><use href="#i-chart"/></svg><span>Bolsa</span></a>
       <a class="hide-mobile" data-panel="settings" onclick="showPanel('settings',this)"><svg class="ic"><use href="#i-settings"/></svg><span>Configurações</span></a>
     </nav>
     <div class="sb-foot">
@@ -721,6 +775,76 @@ nav a.hide-mobile{display:none;}
         </div>
       </div>
       <div id="invest-body"></div>
+
+      <!-- Bens e consórcio: um campo por assunto, nada de formulário longo. -->
+      <div class="panel" style="margin-top:18px">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-wallet"/></svg> O que você tem</span>
+          <span class="panel-note">entra no patrimônio</span></div>
+        <div class="uno">
+          <input id="bem-in" placeholder="Moto Honda CB 300 18000" autocomplete="off"
+                 onkeydown="if(event.key==='Enter')addBem()">
+          <button class="btn btn-primary" onclick="addBem()">Adicionar</button>
+        </div>
+        <div class="uno-hint">Escreva o que é e quanto vale. Ex.: <b>Carro Onix 45 mil</b></div>
+        <div id="bens-body"></div>
+      </div>
+
+      <div class="panel" style="margin-top:14px">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-repeat"/></svg> Consórcio e financiamento</span>
+          <span class="panel-note">o que já é seu e o que falta</span></div>
+        <div class="uno">
+          <input id="cons-in" placeholder="Consórcio imóvel 80000 em 120 parcelas de 850, paguei 12" autocomplete="off"
+                 onkeydown="if(event.key==='Enter')addConsorcio()">
+          <button class="btn btn-primary" onclick="addConsorcio()">Adicionar</button>
+        </div>
+        <div class="uno-hint">Diga o prazo e a parcela. Ex.: <b>Consórcio Honda 120x 850</b></div>
+        <div id="cons-body"></div>
+      </div>
+    </section>
+
+    <!-- ── BOLSA ── -->
+    <section class="panel-section" id="p-bolsa">
+      <div class="topbar">
+        <div class="topbar-left">
+          <h1>Bolsa</h1>
+          <p>Sua carteira de ações e fundos imobiliários</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="uno">
+          <input id="pap-in" placeholder="PETR4 100 32,50" autocomplete="off" spellcheck="false"
+                 oninput="previewPapel()" onkeydown="if(event.key==='Enter')addPapel()">
+          <button class="btn btn-primary" id="pap-btn" onclick="addPapel()">Comprei</button>
+        </div>
+        <div class="uno-hint">Código, quantas cotas e quanto pagou. Sem o preço, uso a cotação de hoje.</div>
+        <div id="pap-preview"></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-trend"/></svg> Minha carteira</span>
+          <span class="panel-note" id="cart-quando"></span></div>
+        <div id="cart-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-search"/></svg> Consultar preços</span></div>
+        <div class="filters">
+          <button class="fb fa" data-tipo="" onclick="setTipoMercado(this)">Tudo</button>
+          <button class="fb" data-tipo="acao" onclick="setTipoMercado(this)">Ações</button>
+          <button class="fb" data-tipo="fii" onclick="setTipoMercado(this)">FIIs</button>
+          <button class="fb" data-tipo="etf" onclick="setTipoMercado(this)">ETFs</button>
+        </div>
+        <div class="uno" style="margin-top:10px">
+          <input id="mkt-in" placeholder="Buscar por código ou nome" autocomplete="off"
+                 oninput="buscarMercadoDebounce()">
+        </div>
+        <div id="mkt-body"></div>
+        <div class="uno-hint" style="margin-top:12px">
+          Os preços vêm da B3 com alguns minutos de atraso. O FinTrack mostra os números —
+          não diz o que comprar; essa decisão é sua.
+        </div>
+      </div>
     </section>
 
     <!-- ── DEFINIÇÕES ── -->
@@ -1031,6 +1155,7 @@ const fmtPct = (v) => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDi
 const fmtNum = (v, d = 1) => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: d });
 const plural = (n, s, p) => (Math.abs(Number(n) - 1) < 0.001 ? s : p);
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
+const js = (v) => esc(JSON.stringify(String(v ?? "")));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icon = (id, cls = "ic") => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
 
@@ -1170,6 +1295,7 @@ async function refresh(silent = false) {
     ]);
     D.summary = summary; D.accounts = accounts; D.transactions = transactions;
     renderDashboard();
+    loadPatrimonio();
   } catch (e) { if (!silent) toast(e.message, "error"); }
 }
 
@@ -1186,7 +1312,8 @@ function showPanel(name, el) {
   if (name === "lançamentos") loadHist();
   if (name === "planejamento") loadPlan();
   if (name === "reserva") loadReserve();
-  if (name === "investimentos") loadInvest();
+  if (name === "investimentos") { loadInvest(); loadPatrimonio(); }
+  if (name === "bolsa") loadBolsa();
   if (name === "settings") loadSettings();
 }
 const showPanelByName = (n) => showPanel(n, null);
@@ -1208,8 +1335,9 @@ function renderDashboard() {
   if (!s) return;
 
   const sb = document.getElementById("sb-val");
-  sb.innerHTML = fmtR(s.patrimonio);
   sb.className = "sb-saldo-val num " + (s.patrimonio >= 0 ? "" : "neg");
+  // Valor provisório: /patrimonio soma ainda bolsa, bens e consórcio.
+  if (!D.patrimonio) sb.innerHTML = fmtR(s.patrimonio); else atualizaPatrimonio();
 
   document.getElementById("cv-in").innerHTML = fmtR(s.entradas);
   document.getElementById("cv-in-sub").textContent = s.entradas ? "recebido este mês" : "nada registado ainda";
@@ -1863,6 +1991,297 @@ async function loadInvest() {
       ${inv.goals.length ? `<div class="panel-title" style="margin-bottom:11px">Metas</div>
         <div class="acc-grid">${inv.goals.map(accCard).join("")}</div>` : ""}`;
   } catch (e) { box.innerHTML = `<div class="panel">${emptyBox("alert", esc(e.message))}</div>`; }
+}
+
+/* ══════════════════════════════════════════════════════
+   BENS E CONSÓRCIO — um campo por assunto
+══════════════════════════════════════════════════════ */
+async function loadPatrimonio() {
+  try {
+    const p = await api("/patrimonio");
+    D.patrimonio = p;
+    renderBens(p.lista_bens);
+    renderConsorcios(p.consorcios);
+    atualizaPatrimonio();
+  } catch { /* os painéis acima continuam válidos sem isto */ }
+}
+
+function renderBens(lista) {
+  const box = document.getElementById("bens-body");
+  if (!box) return;
+  if (!lista.length) {
+    box.innerHTML = `<div class="empty" style="padding:18px 0"><small>Nada registrado ainda.</small></div>`;
+    return;
+  }
+  box.innerHTML = `<div style="margin-top:8px">${lista.map((b) => `
+    <div class="pap">
+      <div class="pap-main">
+        <div class="pap-cod">${esc(b.name)}</div>
+      </div>
+      <div class="pap-val"><div class="pap-preco num">${fmtR(b.valor)}</div></div>
+      <button class="icon-btn danger" onclick="deleteAcc(${b.id},${js(b.name)})" aria-label="Excluir ${esc(b.name)}">${icon("trash", "ic ic-sm")}</button>
+    </div>`).join("")}</div>`;
+}
+
+function renderConsorcios(lista) {
+  const box = document.getElementById("cons-body");
+  if (!box) return;
+  if (!lista.length) {
+    box.innerHTML = `<div class="empty" style="padding:18px 0"><small>Nenhum consórcio registrado.</small></div>`;
+    return;
+  }
+  box.innerHTML = `<div style="margin-top:8px">${lista.map((c) => `
+    <div class="cons">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px">
+        <div style="min-width:0">
+          <div class="pap-cod">${esc(c.name)}</div>
+          <div class="pap-nome">carta de ${fmtRs(c.valor_carta)} · parcela ${fmtRs(c.parcela)}</div>
+        </div>
+        <button class="icon-btn danger" onclick="deleteAcc(${c.id},${js(c.name)})" aria-label="Excluir ${esc(c.name)}">${icon("trash", "ic ic-sm")}</button>
+      </div>
+      <div class="cons-bar"><div class="cons-fill" style="width:${c.progresso_pct}%"></div></div>
+      <div class="cons-legend">
+        <span>${c.parcelas_pagas} de ${c.parcelas_total} pagas · ${fmtPct(c.progresso_pct)}</span>
+        <span>${c.quitado ? "✓ quitado" : `faltam ${c.parcelas_restantes}`}</span>
+      </div>
+      ${c.quitado ? "" : `<div class="cons-legend" style="margin-top:5px">
+        <span>Já pago <b class="num">${fmtRs(c.ja_pago)}</b></span>
+        <span>Falta <b class="num">${fmtRs(c.falta_pagar)}</b> · até ${fmtMesAno(c.quitacao_em)}</span>
+      </div>`}
+      ${c.quitado ? "" : `<button class="btn btn-secondary btn-sm" style="margin-top:9px"
+         onclick="pagarParcela(${c.id},${c.parcelas_pagas + 1})">Paguei mais uma</button>`}
+    </div>`).join("")}</div>`;
+}
+
+const fmtMesAno = (iso) => {
+  if (!iso) return "—";
+  const [y, m] = String(iso).split("-");
+  return mesAno(Number(m), Number(y));
+};
+
+async function addBem() {
+  const el = document.getElementById("bem-in");
+  const texto = el.value.trim();
+  if (!texto) return;
+  try {
+    await api("/bens", { method: "POST", body: { texto } });
+    el.value = "";
+    toast("Registrado.");
+    await loadPatrimonio();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function addConsorcio() {
+  const el = document.getElementById("cons-in");
+  const texto = el.value.trim();
+  if (!texto) return;
+  try {
+    await api("/consorcios", { method: "POST", body: { texto } });
+    el.value = "";
+    toast("Consórcio registrado.");
+    await loadPatrimonio();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function pagarParcela(id, pagas) {
+  try {
+    await api(`/accounts/${id}/parcelas`, { method: "POST", body: { parcelas_pagas: pagas } });
+    await loadPatrimonio();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+/* ══════════════════════════════════════════════════════
+   BOLSA
+══════════════════════════════════════════════════════ */
+let mktTipo = "", mktTimer = null, papelLido = null;
+
+async function loadBolsa() {
+  renderCarteira(null);
+  buscarMercado();
+  try {
+    D.carteira = await api("/carteira");
+    renderCarteira(D.carteira);
+  } catch (e) {
+    document.getElementById("cart-body").innerHTML = emptyBox("alert", esc(e.message));
+  }
+}
+
+function renderCarteira(c) {
+  const box = document.getElementById("cart-body");
+  const quando = document.getElementById("cart-quando");
+  if (!c) { box.innerHTML = skeleton(3); return; }
+
+  quando.textContent = c.atualizado.minutos === null ? ""
+    : c.atualizado.minutos < 1 ? "agora mesmo" : `há ${c.atualizado.minutos} min`;
+
+  if (!c.itens.length) {
+    box.innerHTML = emptyBox("trend", "Sua carteira está vazia.",
+      "Já comprou algum papel? Escreva no campo acima — por exemplo <b>MXRF11 100 9,25</b>.");
+    return;
+  }
+
+  const rc = c.resultado > 0 ? "pos" : c.resultado < 0 ? "neg" : "";
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px">Valor hoje</div>
+        <div class="num" style="font-size:24px;font-weight:600;letter-spacing:-.7px">${fmtR(c.total)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;color:var(--t3)">Você pagou ${fmtRs(c.investido)}</div>
+        <div class="num ${rc}" style="font-size:14px;font-weight:600">${c.resultado >= 0 ? "+" : ""}${fmtRs(c.resultado)} (${fmtPct(c.resultado_pct)})</div>
+      </div>
+    </div>
+    ${c.itens.map(itemCarteira).join("")}`;
+}
+
+function itemCarteira(i) {
+  const rc = i.resultado > 0 ? "pos" : i.resultado < 0 ? "neg" : "";
+  return `<div class="pap">
+    ${logoPapel(i)}
+    <div class="pap-main">
+      <div class="pap-cod">${esc(i.ticker)} ${tagTipo(i.tipo)}</div>
+      <div class="pap-nome">${i.quantidade} ${plural(i.quantidade, "cota", "cotas")} · médio ${fmtRs(i.preco_medio)}${i.sem_cotacao ? " · sem cotação" : ` · hoje ${fmtRs(i.preco_atual)}`}</div>
+    </div>
+    <div class="pap-val">
+      <div class="pap-preco num">${fmtRs(i.atual)}</div>
+      <div class="pap-var num ${rc}">${i.resultado >= 0 ? "+" : ""}${fmtPct(i.resultado_pct)}</div>
+    </div>
+    <button class="icon-btn danger" onclick="removerPapel(${i.id},${js(i.ticker)})" aria-label="Remover ${esc(i.ticker)}">${icon("trash", "ic ic-sm")}</button>
+  </div>`;
+}
+
+// Logo vem de fora; se falhar, cai para as iniciais em vez de deixar buraco.
+const logoPapel = (p) => p.logo
+  ? `<img class="pap-logo" src="${esc(p.logo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pap-logo pap-sem',textContent:'${esc((p.ticker || p.codigo || "").slice(0, 2))}'}))">`
+  : `<div class="pap-logo pap-sem">${esc((p.ticker || p.codigo || "").slice(0, 2))}</div>`;
+
+const ROTULO_TIPO = { acao: "Ação", fii: "FII", etf: "ETF", bdr: "BDR" };
+const tagTipo = (t) => ROTULO_TIPO[t] ? `<span class="tag ${t}">${ROTULO_TIPO[t]}</span>` : "";
+
+// Pré-visualização enquanto digita: mostra o que entendi antes de gravar.
+function previewPapel() {
+  clearTimeout(mktTimer);
+  const texto = document.getElementById("pap-in").value.trim();
+  const box = document.getElementById("pap-preview");
+  papelLido = null;
+  if (texto.length < 4) { box.innerHTML = ""; return; }
+  mktTimer = setTimeout(async () => {
+    try {
+      const r = await api("/carteira/interpretar", { method: "POST", body: { texto } });
+      papelLido = r;
+      box.innerHTML = `<div class="lido">
+        ${logoPapel(r)}
+        <div class="lido-main">
+          <div class="lido-cod">${esc(r.ticker)} ${tagTipo(r.tipo)}</div>
+          <div class="lido-nome">${r.falta === "quantidade" ? "Falta dizer quantas cotas" :
+            `${r.quantidade} ${plural(r.quantidade, "cota", "cotas")} a ${fmtRs(r.preco_medio)}${r.preco_sugerido ? " (preço de hoje)" : ""}`}</div>
+        </div>
+        ${r.total !== null ? `<div class="lido-val">
+          <div class="lido-total num">${fmtR(r.total)}</div>
+          <div class="lido-sub">total</div>
+        </div>` : ""}
+      </div>`;
+    } catch (e) {
+      box.innerHTML = `<div class="lido erro">${esc(e.message)}</div>`;
+    }
+  }, 300);
+}
+
+async function addPapel() {
+  const el = document.getElementById("pap-in");
+  const texto = el.value.trim();
+  if (!texto) return;
+
+  // Se a pré-visualização ainda não chegou, interpreta agora.
+  let lido = papelLido;
+  try {
+    if (!lido) lido = await api("/carteira/interpretar", { method: "POST", body: { texto } });
+    if (lido.falta === "quantidade") { toast("Diga quantas cotas. Ex.: " + lido.ticker + " 100", "error"); return; }
+
+    await api("/carteira", { method: "POST", body: {
+      ticker: lido.ticker, quantidade: lido.quantidade, preco_medio: lido.preco_medio,
+    }});
+    el.value = "";
+    papelLido = null;
+    document.getElementById("pap-preview").innerHTML = "";
+    toast(`${lido.ticker} na carteira.`);
+    D.carteira = await api("/carteira");
+    renderCarteira(D.carteira);
+    atualizaPatrimonio(true);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+async function removerPapel(id, ticker) {
+  if (!confirm(`Tirar ${ticker} da carteira?`)) return;
+  try {
+    await api(`/carteira/${id}`, { method: "DELETE" });
+    D.carteira = await api("/carteira");
+    renderCarteira(D.carteira);
+    atualizaPatrimonio(true);
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function setTipoMercado(el) {
+  mktTipo = el.dataset.tipo;
+  document.querySelectorAll("#p-bolsa .filters .fb").forEach((b) => b.classList.remove("fa"));
+  el.classList.add("fa");
+  buscarMercado();
+}
+
+let mktBuscaTimer = null;
+const buscarMercadoDebounce = () => { clearTimeout(mktBuscaTimer); mktBuscaTimer = setTimeout(buscarMercado, 300); };
+
+async function buscarMercado() {
+  const box = document.getElementById("mkt-body");
+  const q = document.getElementById("mkt-in").value.trim();
+  box.innerHTML = skeleton(4);
+  try {
+    const r = await api(`/mercado/buscar?q=${encodeURIComponent(q)}&tipo=${mktTipo}&limite=15`);
+    if (!r.papeis.length) { box.innerHTML = emptyBox("search", "Nada encontrado para “" + esc(q) + "”."); return; }
+    box.innerHTML = `<div style="margin-top:10px">${r.papeis.map(linhaMercado).join("")}</div>`;
+  } catch (e) { box.innerHTML = emptyBox("alert", esc(e.message)); }
+}
+
+function linhaMercado(p) {
+  const vc = p.variacao > 0 ? "pos" : p.variacao < 0 ? "neg" : "";
+  return `<div class="pap">
+    ${logoPapel(p)}
+    <div class="pap-main">
+      <div class="pap-cod">${esc(p.codigo)} ${tagTipo(p.tipo)}</div>
+      <div class="pap-nome">${esc(p.nome || p.setor || "")}</div>
+    </div>
+    <div class="pap-val">
+      <div class="pap-preco num">${fmtR(p.preco)}</div>
+      <div class="pap-var num ${vc}">${p.variacao >= 0 ? "+" : ""}${fmtPct(p.variacao)}</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="usarPapel(${js(p.codigo)})">Comprei</button>
+  </div>`;
+}
+
+// Clicar em "Comprei" na busca só preenche o campo — o usuário completa a
+// quantidade e confirma. Nada é gravado sem ele mandar.
+function usarPapel(codigo) {
+  const el = document.getElementById("pap-in");
+  el.value = codigo + " ";
+  el.focus();
+  el.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+// O rodapé da barra lateral passa a somar carteira, bens e consórcio pago.
+function atualizaPatrimonio(recarregar = false) {
+  if (recarregar) { loadPatrimonio(); return; }
+  const p = D.patrimonio;
+  if (!p) return;
+  const el = document.getElementById("sb-val");
+  const hint = document.getElementById("sb-hint");
+  if (!el) return;
+  el.innerHTML = fmtR(p.total);
+  const partes = [];
+  if (p.carteira) partes.push("bolsa");
+  if (p.bens) partes.push("bens");
+  if (p.consorcio_pago) partes.push("consórcio");
+  hint.textContent = ["contas", ...partes].join(" + ");
 }
 
 function accCard(a) {
