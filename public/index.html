@@ -119,6 +119,8 @@ nav a.active{color:var(--brand);border-top-color:var(--brand);}
 nav a.active .ic{color:var(--brand);}
 /* Barra de abas do celular fica em 5 — Configurações sobe para o topo. */
 nav a.hide-mobile{display:none;}
+nav a span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+@media (max-width:400px){ nav a{font-size:11px;padding:9px 1px;} }
 
 /* Item de grid/flex não encolhe abaixo do conteúdo sem isto (min-width:auto
    é o padrão), e um nome de conta comprido empurra a página para o lado. */
@@ -230,7 +232,7 @@ nav a.hide-mobile{display:none;}
 .fb.fa{background:var(--brand);color:#fff;border-color:var(--brand);}
 .search-wrap{position:relative;display:flex;align-items:center;flex:1;}
 .search-wrap .ic{position:absolute;left:11px;color:var(--t4);width:16px;height:16px;pointer-events:none;}
-.search{background:var(--s1);border:1px solid var(--bd2);color:var(--t);border-radius:var(--r-sm);padding:11px 12px 11px 34px;font-size:15px;font-family:var(--sans);outline:none;width:100%;transition:border-color .16s var(--ease);}
+.search{background:var(--s1);border:1px solid var(--bd2);color:var(--t);border-radius:var(--r-sm);padding:11px 12px 11px 34px;min-height:44px;font-size:15px;font-family:var(--sans);outline:none;width:100%;transition:border-color .16s var(--ease);}
 .search:focus{border-color:var(--brand);}
 
 /* Celular: a tabela vira lista de cartões — tabela em 375px é ilegível. */
@@ -355,6 +357,49 @@ nav a.hide-mobile{display:none;}
 .toast.success{background:#065F46;}
 .toast.error{background:#991B1B;}
 .toast.info{background:#1E3A8A;}
+
+/* ── Campo único ──
+   Um input grande, sem rótulo e sem seletor de tipo: a frase é interpretada
+   no servidor, que descobre sozinho se é papel, bem ou consórcio. É a
+   diferença entre parecer um formulário e parecer uma ferramenta. */
+.uno{display:flex;gap:8px;align-items:stretch;}
+.uno input{flex:1;min-width:0;background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r-sm);
+  padding:0 14px;min-height:48px;font-size:15px;font-family:var(--sans);color:var(--t);}
+.uno input::placeholder{color:var(--t4);}
+.uno input:focus{border-color:var(--brand);background:var(--s1);outline:none;box-shadow:0 0 0 3px var(--brand-dim);}
+.uno .btn{flex:0 0 auto;min-height:48px;}
+.uno-hint{font-size:12px;color:var(--t3);margin-top:8px;line-height:1.55;}
+.uno-hint b{color:var(--t2);font-weight:600;}
+
+/* Confirmação do que foi entendido, antes de gravar. */
+.lido{margin-top:12px;border:1px solid var(--bd);border-radius:var(--r-sm);padding:12px 13px;
+  background:var(--s2);display:flex;align-items:center;gap:12px;}
+.lido.erro{border-color:var(--bd2);background:var(--neg-dim);color:var(--neg);font-size:13px;display:block;}
+.lido-main{flex:1;min-width:0;}
+.lido-cod{font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.lido-nome{font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lido-val{text-align:right;flex:0 0 auto;}
+.lido-total{font-size:15px;font-weight:600;}
+.lido-sub{font-size:11px;color:var(--t3);}
+
+/* ── Linha de papel (carteira e busca de preços) ── */
+.pap{display:flex;align-items:center;gap:11px;padding:12px 2px;border-bottom:1px solid var(--bd);}
+.pap:last-child{border-bottom:none;}
+.pap-logo{width:32px;height:32px;border-radius:7px;object-fit:contain;background:var(--s2);
+  border:1px solid var(--bd);flex:0 0 auto;}
+.pap-sem{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t3);}
+.pap-main{flex:1;min-width:0;}
+.pap-cod{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px;}
+.pap-nome{font-size:12px;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pap-val{text-align:right;flex:0 0 auto;}
+.pap-preco{font-size:14px;font-weight:600;}
+.pap-var{font-size:12px;}
+.tag{font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;padding:2px 6px;
+  border-radius:4px;background:var(--s3);color:var(--t3);}
+.tag.fii{background:var(--brand-dim);color:var(--brand);}
+.tag.acao{background:var(--pos-dim);color:var(--pos);}
+.tag.ao-vivo{background:var(--pos-dim);color:var(--pos);text-transform:none;letter-spacing:0;}
+.panel-note{font-size:12px;font-weight:500;color:var(--t3);}
 
 .empty{text-align:center;padding:30px 18px;color:var(--t3);}
 .empty-ico{width:52px;height:52px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;color:var(--t4);}
@@ -534,10 +579,11 @@ nav a.hide-mobile{display:none;}
     <div class="sb-section">Gestão</div>
     <nav aria-label="Navegação principal">
       <a class="active" data-panel="dashboard"     onclick="showPanel('dashboard',this)"><svg class="ic"><use href="#i-home"/></svg><span>Início</span></a>
-      <a data-panel="lançamentos"    onclick="showPanel('lançamentos',this)"><svg class="ic"><use href="#i-list"/></svg><span>Lançamentos</span></a>
+      <a data-panel="lançamentos"    onclick="showPanel('lançamentos',this)"><svg class="ic"><use href="#i-list"/></svg><span>Extrato</span></a>
       <a data-panel="planejamento"   onclick="showPanel('planejamento',this)"><svg class="ic"><use href="#i-calendar"/></svg><span>Planos</span></a>
       <a data-panel="reserva"       onclick="showPanel('reserva',this)"><svg class="ic"><use href="#i-shield"/></svg><span>Reserva</span></a>
       <a data-panel="investimentos" onclick="showPanel('investimentos',this)"><svg class="ic"><use href="#i-trend"/></svg><span>Investir</span></a>
+      <a data-panel="bolsa" onclick="showPanel('bolsa',this)"><svg class="ic"><use href="#i-chart"/></svg><span>Bolsa</span></a>
       <a class="hide-mobile" data-panel="settings" onclick="showPanel('settings',this)"><svg class="ic"><use href="#i-settings"/></svg><span>Configurações</span></a>
     </nav>
     <div class="sb-foot">
@@ -721,7 +767,60 @@ nav a.hide-mobile{display:none;}
         </div>
       </div>
       <div id="invest-body"></div>
+
+      <div class="topbar" style="margin-top:26px">
+        <div class="topbar-left">
+          <h1 style="font-size:19px">Patrimônio</h1>
+          <p>Ações, bens e consórcios — o que você tem fora do mês</p>
+        </div>
+      </div>
+      <div class="panel" style="margin-bottom:16px">
+        <div class="uno">
+          <input id="uno-in" placeholder="PETR4 100 32,50" autocomplete="off" spellcheck="false"
+                 oninput="previewUno()" onkeydown="if(event.key==='Enter')addUno()">
+          <button class="btn btn-primary" onclick="addUno()">Adicionar</button>
+        </div>
+        <div class="uno-hint">
+          Escreva numa linha e eu descubro o que é.<br>
+          <b>MXRF11 200 9,25</b> · <b>Moto Honda CB 300 18000</b> · <b>Consórcio imóvel 120x 850, paguei 12</b>
+        </div>
+        <div id="uno-preview"></div>
+      </div>
       <div id="assets-body"></div>
+    </section>
+
+    <!-- ── BOLSA ── -->
+    <section class="panel-section" id="p-bolsa">
+      <div class="topbar">
+        <div class="topbar-left">
+          <h1>Bolsa</h1>
+          <p>Preços da B3, atualizados durante o pregão</p>
+        </div>
+      </div>
+
+      <div class="panel" style="margin-bottom:14px">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-trend"/></svg> Meus papéis</span>
+          <span class="panel-note" id="cart-quando"></span></div>
+        <div id="cart-body"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title"><span><svg class="ic"><use href="#i-search"/></svg> Consultar preços</span></div>
+        <div class="filters">
+          <button class="fb fa" data-tipo="" onclick="setTipoMercado(this)">Tudo</button>
+          <button class="fb" data-tipo="acao" onclick="setTipoMercado(this)">Ações</button>
+          <button class="fb" data-tipo="fii" onclick="setTipoMercado(this)">FIIs</button>
+          <button class="fb" data-tipo="etf" onclick="setTipoMercado(this)">ETFs</button>
+        </div>
+        <div class="uno" style="margin-top:10px">
+          <input id="mkt-in" placeholder="Buscar por código ou nome" autocomplete="off" oninput="buscarMercadoDebounce()">
+        </div>
+        <div id="mkt-body"></div>
+        <div class="uno-hint" style="margin-top:12px">
+          Os preços vêm da B3 com alguns minutos de atraso. O FinTrack mostra os
+          números — não diz o que comprar; essa decisão é sua.
+        </div>
+      </div>
     </section>
 
     <!-- ── DEFINIÇÕES ── -->
@@ -1112,6 +1211,7 @@ const fmtPct = (v) => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDi
 const fmtNum = (v, d = 1) => Number(v || 0).toLocaleString("pt-BR", { maximumFractionDigits: d });
 const plural = (n, s, p) => (Math.abs(Number(n) - 1) < 0.001 ? s : p);
 const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
+const js = (v) => esc(JSON.stringify(String(v ?? "")));
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icon = (id, cls = "ic") => `<svg class="${cls}"><use href="#i-${id}"/></svg>`;
 
@@ -1268,6 +1368,7 @@ function showPanel(name, el) {
   if (name === "planejamento") loadPlan();
   if (name === "reserva") loadReserve();
   if (name === "investimentos") { loadInvest(); loadAssets(); }
+  if (name === "bolsa") loadBolsa();
   if (name === "settings") loadSettings();
 }
 const showPanelByName = (n) => showPanel(n, null);
@@ -1998,22 +2099,12 @@ async function loadAssets() {
     D.networth = nw;
     const a = nw.assets;
 
-    const head = `
-      <div class="topbar" style="margin-top:26px">
-        <div class="topbar-left">
-          <h1 style="font-size:19px">Patrimônio</h1>
-          <p>Ações, bens e consórcios — o que você tem fora do mês</p>
-        </div>
-        <div class="topbar-right">
-          <button class="btn btn-secondary btn-sm" onclick="openAssetModal()">${icon("plus", "ic ic-sm")} Adicionar</button>
-        </div>
-      </div>`;
+    const head = "";
 
     if (!a.assets.length) {
       box.innerHTML = head + `<div class="panel">${emptyBox("wallet",
-        "Nenhum bem ou ativo registrado.",
-        "Registre suas ações e fundos imobiliários, quanto valem o carro e a moto, e o consórcio com as parcelas que faltam. Tudo num formulário só.",
-        `<div style="margin-top:15px"><button class="btn btn-primary" onclick="openAssetModal()">Adicionar item</button></div>`)}</div>`;
+        "Nada registrado ainda.",
+        "Use o campo acima: suas ações e fundos imobiliários, quanto valem o carro e a moto, e o consórcio com as parcelas que faltam.")}</div>`;
       return;
     }
 
@@ -2027,9 +2118,9 @@ async function loadAssets() {
     box.innerHTML = head + `
       <div class="metrics">
         <div class="metric">
-          <div class="metric-label">Patrimônio líquido</div>
+          <div class="metric-label">Patrimônio</div>
           <div class="metric-value num">${fmtR(nw.net_worth)}</div>
-          <div class="metric-sub">contas + bens − o que ainda deve</div>
+          <div class="metric-sub">contas + papéis + bens + consórcio pago</div>
         </div>
         <div class="metric">
           <div class="metric-label">Ações e FIIs</div>
@@ -2042,7 +2133,7 @@ async function loadAssets() {
           <div class="metric-sub">${a.bens.length} ${plural(a.bens.length, "item", "itens")}</div>
         </div>
         <div class="metric">
-          <div class="metric-label">Consórcio a pagar</div>
+          <div class="metric-label">Consórcio a vencer</div>
           <div class="metric-value num">${fmtR(a.consorcio_debt)}</div>
           <div class="metric-sub">${a.consorcio_monthly > 0 ? fmtRs(a.consorcio_monthly) + " por mês" : "nada em aberto"}</div>
         </div>
@@ -2051,6 +2142,198 @@ async function loadAssets() {
       ${grupo("Bens", a.bens)}
       ${grupo("Consórcios", a.consorcios)}`;
   } catch (e) { box.innerHTML = `<div class="panel">${emptyBox("alert", esc(e.message))}</div>`; }
+}
+
+/* ══════════════════════════════════════════════════════
+   CAMPO ÚNICO — o servidor descobre se é papel, bem ou consórcio
+══════════════════════════════════════════════════════ */
+let unoLido = null, unoTimer = null;
+
+const ROTULO_KIND = { ativo: "Papel", bem: "Bem", consorcio: "Consórcio" };
+const ROTULO_TIPO = { acao: "Ação", fii: "FII", etf: "ETF", bdr: "BDR" };
+const tagTipo = (t) => ROTULO_TIPO[t] ? `<span class="tag ${t}">${ROTULO_TIPO[t]}</span>` : "";
+
+// Logo vem de fora; se falhar, cai para as iniciais em vez de deixar buraco.
+const logoPapel = (p) => {
+  const cod = String(p.ticker || p.codigo || p.name || "").slice(0, 2);
+  return p.logo
+    ? `<img class="pap-logo" src="${esc(p.logo)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pap-logo pap-sem',textContent:${js(cod)}}))">`
+    : `<div class="pap-logo pap-sem">${esc(cod)}</div>`;
+};
+
+// Enquanto digita, mostra o que foi entendido. Nada é gravado aqui.
+function previewUno() {
+  clearTimeout(unoTimer);
+  const texto = document.getElementById("uno-in").value.trim();
+  const box = document.getElementById("uno-preview");
+  unoLido = null;
+  if (texto.length < 4) { box.innerHTML = ""; return; }
+  unoTimer = setTimeout(async () => {
+    try {
+      const r = await api("/assets/interpretar", { method: "POST", body: { texto } });
+      unoLido = r;
+      // Só papel tem logo. Um quadrado com "No" ao lado de "Notebook" é ruído.
+      box.innerHTML = `<div class="lido">${r.kind === "ativo" ? logoPapel(r) : ""}<div class="lido-main">
+          <div class="lido-cod">${esc(r.name)} ${r.kind === "ativo" ? tagTipo(r.asset_type) : `<span class="tag">${ROTULO_KIND[r.kind]}</span>`}</div>
+          <div class="lido-nome">${resumoLido(r)}</div>
+        </div>${valorLido(r)}</div>`;
+    } catch (e) { box.innerHTML = `<div class="lido erro">${esc(e.message)}</div>`; }
+  }, 300);
+}
+
+function resumoLido(r) {
+  if (r.kind === "ativo") {
+    if (r.falta === "quantidade") return "Falta dizer quantas cotas";
+    return `${nf(r.quantity, r.quantity % 1 ? 2 : 0)} ${plural(r.quantity, "cota", "cotas")} a ${fmtRs(r.avg_price)}`
+         + (r.preco_sugerido ? " (preço de hoje)" : "");
+  }
+  if (r.kind === "consorcio") {
+    return `${r.installments} parcelas de ${fmtRs(r.installment_amount)}`
+         + (r.installments_paid ? ` · ${r.installments_paid} já pagas` : "");
+  }
+  return "valor informado por você";
+}
+
+function valorLido(r) {
+  const v = r.kind === "ativo" ? r.total : r.kind === "consorcio" ? r.contract_total : r.value;
+  if (v == null) return "";
+  const rot = r.kind === "consorcio" ? "contrato" : "total";
+  return `<div class="lido-val"><div class="lido-total num">${fmtR(v)}</div><div class="lido-sub">${rot}</div></div>`;
+}
+
+async function addUno() {
+  const el = document.getElementById("uno-in");
+  const texto = el.value.trim();
+  if (!texto) return;
+  try {
+    // Se a pré-visualização ainda não chegou, interpreta agora.
+    const r = unoLido || await api("/assets/interpretar", { method: "POST", body: { texto } });
+    if (r.falta === "quantidade") { toast(`Diga quantas cotas. Ex.: ${r.ticker} 100`, "error"); return; }
+
+    const body = r.kind === "ativo"
+      ? { kind: "ativo", name: r.name, ticker: r.ticker, quantity: r.quantity, avg_price: r.avg_price }
+      : r.kind === "consorcio"
+        ? { kind: "consorcio", name: r.name, installments: r.installments,
+            installments_paid: r.installments_paid, installment_amount: r.installment_amount }
+        : { kind: "bem", name: r.name, value: r.value };
+
+    await api("/assets", { method: "POST", body });
+    el.value = "";
+    unoLido = null;
+    document.getElementById("uno-preview").innerHTML = "";
+    toast(`${r.name} registrado.`);
+    await loadAssets();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+/* ══════════════════════════════════════════════════════
+   BOLSA
+══════════════════════════════════════════════════════ */
+let mktTipo = "", mktTimer = null;
+
+async function loadBolsa() {
+  document.getElementById("cart-body").innerHTML = skeleton(3);
+  buscarMercado();
+  try {
+    const nw = await api("/networth");
+    D.networth = nw;
+    renderCarteira(nw.assets);
+  } catch (e) { document.getElementById("cart-body").innerHTML = emptyBox("alert", esc(e.message)); }
+}
+
+function renderCarteira(a) {
+  const box = document.getElementById("cart-body");
+  const ativos = a.ativos;
+  if (!ativos.length) {
+    box.innerHTML = emptyBox("trend", "Você ainda não tem papéis.",
+      "Registre em Investir — por exemplo <b>MXRF11 100 9,25</b>.",
+      `<div style="margin-top:15px"><button class="btn btn-secondary btn-sm" onclick="showPanelByName('investimentos')">Ir para Investir</button></div>`);
+    document.getElementById("cart-quando").textContent = "";
+    return;
+  }
+
+  const aoVivo = ativos.filter((x) => x.live).length;
+  document.getElementById("cart-quando").textContent =
+    aoVivo ? `${aoVivo} com preço da bolsa` : "sem cotação agora";
+
+  const gc = a.ativos_gain > 0 ? "pos" : a.ativos_gain < 0 ? "neg" : "";
+  const total = a.ativos_value;
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px">
+      <div>
+        <div style="font-size:12px;color:var(--t3);text-transform:uppercase;letter-spacing:.9px;margin-bottom:5px">Valor hoje</div>
+        <div class="num" style="font-size:24px;font-weight:600;letter-spacing:-.7px">${fmtR(total)}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;color:var(--t3)">Você pagou ${fmtRs(a.ativos_cost)}</div>
+        <div class="num ${gc}" style="font-size:14px;font-weight:600">${a.ativos_gain >= 0 ? "+" : ""}${fmtRs(a.ativos_gain)}</div>
+      </div>
+    </div>
+    ${[...ativos].sort((x, y) => y.value - x.value).map((i) => itemCarteira(i, total)).join("")}`;
+}
+
+function itemCarteira(i, total) {
+  const gc = i.gain > 0 ? "pos" : i.gain < 0 ? "neg" : "";
+  const peso = total > 0 ? ` · ${fmtPct((i.value / total) * 100)} da carteira` : "";
+  return `<div class="pap">
+    ${logoPapel(i)}
+    <div class="pap-main">
+      <div class="pap-cod">${esc(i.ticker || i.name)} ${tagTipo(i.asset_type)}${i.live ? `<span class="tag ao-vivo">hoje ${fmtRs(i.price)}</span>` : ""}</div>
+      <div class="pap-nome">${nf(i.quantity, i.quantity % 1 ? 2 : 0)} ${plural(i.quantity, "cota", "cotas")} · médio ${fmtRs(i.avg_price)}${peso}</div>
+    </div>
+    <div class="pap-val">
+      <div class="pap-preco num">${fmtRs(i.value)}</div>
+      <div class="pap-var num ${gc}">${i.gain >= 0 ? "+" : ""}${fmtPct(i.gain_pct)}</div>
+    </div>
+  </div>`;
+}
+
+function setTipoMercado(el) {
+  mktTipo = el.dataset.tipo;
+  document.querySelectorAll("#p-bolsa .filters .fb").forEach((b) => b.classList.remove("fa"));
+  el.classList.add("fa");
+  buscarMercado();
+}
+
+const buscarMercadoDebounce = () => { clearTimeout(mktTimer); mktTimer = setTimeout(buscarMercado, 300); };
+
+async function buscarMercado() {
+  const box = document.getElementById("mkt-body");
+  const q = document.getElementById("mkt-in").value.trim();
+  box.innerHTML = skeleton(4);
+  try {
+    const r = await api(`/mercado/buscar?q=${encodeURIComponent(q)}&tipo=${mktTipo}&limite=15`);
+    if (!r.papeis.length) { box.innerHTML = emptyBox("search", `Nada encontrado para "${esc(q)}".`); return; }
+    box.innerHTML = `<div style="margin-top:10px">${r.papeis.map(linhaMercado).join("")}</div>`;
+  } catch (e) { box.innerHTML = emptyBox("alert", esc(e.message)); }
+}
+
+function linhaMercado(p) {
+  const vc = p.variacao > 0 ? "pos" : p.variacao < 0 ? "neg" : "";
+  return `<div class="pap">
+    ${logoPapel(p)}
+    <div class="pap-main">
+      <div class="pap-cod">${esc(p.codigo)} ${tagTipo(p.tipo)}</div>
+      <div class="pap-nome">${esc(p.nome || p.setor || "")}</div>
+    </div>
+    <div class="pap-val">
+      <div class="pap-preco num">${fmtR(p.preco)}</div>
+      <div class="pap-var num ${vc}">${p.variacao >= 0 ? "+" : ""}${fmtPct(p.variacao)}</div>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="comprarPapel(${js(p.codigo)})">Comprei</button>
+  </div>`;
+}
+
+// Só preenche o campo em Investir — nada é gravado sem o usuário confirmar.
+function comprarPapel(codigo) {
+  showPanelByName("investimentos");
+  setTimeout(() => {
+    const el = document.getElementById("uno-in");
+    if (!el) return;
+    el.value = codigo + " ";
+    el.focus();
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, 120);
 }
 
 function assetCard(a) {
@@ -2071,6 +2354,7 @@ function assetCard(a) {
       <div class="acc-meta">
         <span>${nf(a.quantity, a.quantity % 1 ? 2 : 0)} ${plural(a.quantity, "cota", "cotas")} × <b>${fmtRs(a.avg_price)}</b></span>
         <span>Custou <b>${fmtRs(a.cost)}</b></span>
+        ${a.live ? `<span>Hoje <b>${fmtRs(a.price)}</b> na B3</span>` : ""}
         ${a.priced
           ? `<span>${a.gain >= 0 ? "Ganho" : "Perda"} <b class="${gc}">${fmtRs(a.gain)}</b> (${fmtPct(a.gain_pct)})</span>`
           : `<span class="acc-inst">sem preço de hoje</span>`}

@@ -157,4 +157,22 @@ function consorcio(texto) {
   };
 }
 
-module.exports = { compra, bem, consorcio, numero, numeros };
+/**
+ * De que assunto é a frase? Descobrir isto no servidor é o que permite ter um
+ * campo só na tela: o usuário escreve e não escolhe categoria nenhuma.
+ *
+ * Ordem importa. "Consórcio Honda 120x 850" tem cara de bem e de consórcio;
+ * a pista de parcelamento decide primeiro.
+ */
+function detectar(texto) {
+  const t = String(texto || "");
+  const low = t.toLowerCase();
+
+  if (/cons[óo]rcio|financiamento|\bparcelas?\b|\b\d+\s*x\b|\b\d+\s*(?:meses|vezes)\b/.test(low)) {
+    return "consorcio";
+  }
+  if (CODIGO.test(t.toUpperCase())) return "ativo";
+  return "bem";
+}
+
+module.exports = { compra, bem, consorcio, detectar, numero, numeros };

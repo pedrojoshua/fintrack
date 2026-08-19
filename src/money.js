@@ -328,18 +328,25 @@ async function fixedIncome(userId) {
 // Nenhum destes é lançamento do mês. São o que você *tem* (e, no consórcio,
 // também o que ainda deve). Os valores derivados nunca são guardados: saem
 // sempre dos campos informados, para não dessincronizar.
-function decorateAsset(a) {
+function decorateAsset(a, cot) {
   const out = { ...a, quantity: Number(a.quantity) || 0 };
 
   if (a.kind === "ativo") {
-    // Sem preço atual informado, o ativo vale o que custou — nunca inventamos
-    // cotação nem consultamos mercado.
-    const price = a.current_price != null ? Number(a.current_price) : Number(a.avg_price);
+    // Ordem de preferência: cotação da B3 de hoje → preço que o usuário
+    // informou → o que custou. Nunca inventamos um número.
+    const price = cot ? cot.preco
+                : a.current_price != null ? Number(a.current_price)
+                : Number(a.avg_price);
     out.cost = round2(out.quantity * Number(a.avg_price));
     out.value = round2(out.quantity * price);
     out.gain = round2(out.value - out.cost);
     out.gain_pct = out.cost > 0 ? round2((out.gain / out.cost) * 100) : 0;
-    out.priced = a.current_price != null;
+    out.price = round2(price);
+    out.priced = !!cot || a.current_price != null;
+    out.live = !!cot;                        // veio da bolsa agora
+    out.day_change = cot ? round2(cot.variacao) : null;
+    out.logo = cot?.logo || null;
+    out.asset_type = cot?.tipo || null;      // acao | fii | etf | bdr
     out.debt = 0;
   } else if (a.kind === "consorcio") {
     const total = a.installments;
@@ -379,7 +386,16 @@ async function getAssets(userId) {
     "SELECT * FROM assets WHERE user_id = $1 AND archived = false ORDER BY kind, created_at",
     [userId]
   );
-  const list = rows.map(decorateAsset);
+
+  // Cotação do dia para quem tem ticker. O preço fica no objeto de saída, não
+  // no banco: preço de bolsa envelhece, e guardado ele mentiria em silêncio.
+  const tickers = rows.filter((a) => a.kind === "ativo" && a.ticker).map((a) => a.ticker);
+  let cotacao = {};
+  if (tickers.length) {
+    try { cotacao = await require("./mercado").precos(tickers); } catch { /* sem bolsa, usa o preço informado */ }
+  }
+
+  const list = rows.map((a) => decorateAsset(a, cotacao[a.ticker]));
   const of = (k) => list.filter((a) => a.kind === k);
   const sum = (l, f) => round2(l.reduce((s, a) => s + f(a), 0));
 
@@ -402,7 +418,14 @@ async function getAssets(userId) {
   };
 }
 
-// Patrimônio líquido: contas + ativos + bens − o que ainda se deve.
+// Patrimônio: o que você tem hoje.
+//
+// As parcelas que faltam do consórcio NÃO entram aqui como dívida. Um
+// consórcio não contemplado é poupança forçada: você já pôs 10 mil, deve mais
+// 92 mil, e no fim recebe uma carta de 102 mil. Descontar só a metade que
+// pesa faria alguém com moto, carro e dinheiro no banco ver patrimônio
+// negativo — número tecnicamente defensável e completamente inútil.
+// O que falta pagar aparece à parte, como compromisso.
 async function getNetWorth(userId) {
   const accounts = await getAccounts(userId);
   const assets = await getAssets(userId);
@@ -410,8 +433,8 @@ async function getNetWorth(userId) {
   return {
     accounts_total: accountsTotal,
     assets_total: assets.total_value,
-    debt_total: assets.total_debt,
-    net_worth: round2(accountsTotal + assets.total_value - assets.total_debt),
+    debt_total: assets.total_debt,          // compromisso futuro, não descontado
+    net_worth: round2(accountsTotal + assets.total_value),
     assets,
   };
 }

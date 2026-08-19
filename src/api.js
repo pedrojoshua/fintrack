@@ -6,6 +6,8 @@ const db = require("./db");
 const auth = require("./auth");
 const money = require("./money");
 const cats = require("./categories");
+const mercado = require("./mercado");
+const entrada = require("./entrada");
 
 const router = express.Router();
 
@@ -545,6 +547,67 @@ function assetFields(kind, b) {
 const ASSET_COLS = ["name", "note", "ticker", "quantity", "avg_price", "current_price",
   "value", "installments", "installments_paid", "installment_amount", "start_date"];
 
+// ── Bolsa ────────────────────────────────────────────
+// Só informação de mercado: preço, variação e setor. A plataforma não sugere
+// o que comprar — mostra os números para o usuário decidir.
+router.get("/mercado/buscar", wrap(async (req, res) => {
+  const tipo = ["acao", "fii", "etf", "bdr"].includes(req.query.tipo) ? req.query.tipo : null;
+  res.json({
+    papeis: await mercado.buscar(clean(req.query.q, 40), { tipo, limite: Math.min(Number(req.query.limite) || 20, 50) }),
+    fonte: mercado.estado(),
+  });
+}));
+
+// ── Campo único ──────────────────────────────────────
+// O usuário escreve uma frase e o servidor separa os pedaços; a tela mostra o
+// que foi entendido antes de gravar. Formulário com muitos campos, não.
+router.post("/assets/interpretar", wrap(async (req, res) => {
+  const texto = clean(req.body?.texto, 160);
+  if (!texto) return res.status(400).json({ error: "Escreva o que você tem." });
+  // Sem tipo informado, a própria frase diz do que se trata — é isso que
+  // permite a tela ter um campo só, sem o usuário escolher categoria.
+  const kind = ASSET_KINDS.includes(req.body?.kind) ? req.body.kind : entrada.detectar(texto);
+
+  if (kind === "ativo") {
+    const lido = entrada.compra(texto);
+    if (lido.erro) return res.status(400).json({ error: lido.erro });
+
+    const papel = await mercado.info(lido.ticker);
+    if (!papel) return res.status(404).json({ error: `Não achei "${lido.ticker}" na B3.` });
+
+    // Sem preço na frase, sugere o de hoje — é o caso de quem acabou de comprar.
+    const avg_price = lido.preco_medio ?? papel.preco;
+    const quantity = lido.quantidade ?? null;
+    return res.json({
+      kind, ticker: papel.codigo, name: papel.codigo, nome: papel.nome,
+      logo: papel.logo, asset_type: papel.tipo,
+      price_today: papel.preco, day_change: papel.variacao,
+      quantity, avg_price, preco_sugerido: lido.preco_medio === undefined,
+      falta: quantity ? null : "quantidade",
+      total: quantity ? Math.round(quantity * avg_price * 100) / 100 : null,
+    });
+  }
+
+  if (kind === "bem") {
+    const lido = entrada.bem(texto);
+    if (lido.erro) return res.status(400).json({ error: lido.erro });
+    if (lido.falta === "name") return res.status(400).json({ error: "Falta dizer o que é. Ex.: Moto Honda 18000" });
+    return res.json({ kind, name: lido.name, value: lido.valor });
+  }
+
+  const lido = entrada.consorcio(texto);
+  if (lido.erro) return res.status(400).json({ error: lido.erro });
+  if (lido.falta === "parcela_valor") return res.status(400).json({ error: "Falta o valor da parcela. Ex.: 120 parcelas de 850" });
+  if (lido.falta === "parcelas_total") return res.status(400).json({ error: "Falta o prazo. Ex.: em 120 parcelas" });
+  res.json({
+    kind, name: lido.name,
+    installments: lido.parcelas_total,
+    installments_paid: lido.parcelas_pagas,
+    installment_amount: lido.parcela_valor,
+    contract_total: lido.goal,
+  });
+}));
+
 router.get("/assets", wrap(async (req, res) => res.json(await money.getAssets(req.user.id))));
 
 router.get("/networth", wrap(async (req, res) => res.json(await money.getNetWorth(req.user.id))));
@@ -554,6 +617,27 @@ router.post("/assets", wrap(async (req, res) => {
   if (!ASSET_KINDS.includes(b.kind)) return res.status(400).json({ error: "Tipo inválido." });
   const { fields, error } = assetFields(b.kind, b);
   if (error) return res.status(400).json({ error });
+
+  // Comprar o mesmo papel outra vez é normal e não deve virar duas linhas:
+  // soma a quantidade e recalcula o preço médio ponderado. Duas linhas
+  // separadas dariam dois "ganhos" que não somam ao ganho real da posição.
+  if (b.kind === "ativo" && fields.ticker) {
+    const atual = await db.one(
+      "SELECT * FROM assets WHERE user_id = $1 AND kind = 'ativo' AND ticker = $2 AND archived = false",
+      [req.user.id, fields.ticker]
+    );
+    if (atual) {
+      const qA = Number(atual.quantity), qB = Number(fields.quantity);
+      const total = qA + qB;
+      const medio = total > 0 ? (qA * Number(atual.avg_price) + qB * Number(fields.avg_price)) / total : 0;
+      const merged = await db.one(
+        `UPDATE assets SET quantity = $1, avg_price = $2, updated_at = now()
+          WHERE id = $3 AND user_id = $4 RETURNING *`,
+        [total, Math.round(medio * 100) / 100, atual.id, req.user.id]
+      );
+      return res.status(200).json(merged);
+    }
+  }
 
   const vals = [req.user.id, b.kind, ...ASSET_COLS.map((c) => fields[c])];
   const ph = vals.map((_, i) => "$" + (i + 1)).join(",");
@@ -578,10 +662,10 @@ router.patch("/assets/:id", wrap(async (req, res) => {
 
   const cols = ["kind", ...ASSET_COLS];
   const vals = [kind, ...ASSET_COLS.map((c) => fields[c])];
-  const sets = cols.map((c, i) => `${c} = ${i + 1}`).join(", ");
+  const sets = cols.map((c, i) => `${c} = $${i + 1}`).join(", ");
   const row = await db.one(
     `UPDATE assets SET ${sets}, updated_at = now()
-      WHERE id = ${vals.length + 1} AND user_id = ${vals.length + 2} RETURNING *`,
+      WHERE id = $${vals.length + 1} AND user_id = $${vals.length + 2} RETURNING *`,
     [...vals, id, req.user.id]
   );
   res.json(row);
